@@ -202,6 +202,11 @@ table.vend th{text-align:left;font-size:11px;text-transform:uppercase;letter-spa
 table.vend td{padding:5px 6px;border-bottom:1px solid var(--line)}
 table.vend input,table.vend select{width:100%;padding:5px 6px;border:1px solid var(--line);border-radius:5px;background:var(--surface)}
 table.vend input{max-width:90px}
+.toast-act{border:0;background:none;color:inherit;font:inherit;font-weight:600;text-decoration:underline;cursor:pointer;margin-left:10px;padding:0}
+.act-btns{display:inline-flex;flex-direction:column;align-items:flex-end;gap:4px}
+.btn.sup{font-size:11.5px;padding:2px 8px;color:var(--muted)}
+.btn.sup:hover{color:var(--ink)}
+.supp-note{margin-top:10px;font-size:13px;color:var(--ink-2);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .toast{position:fixed;left:50%;bottom:max(20px,calc(env(safe-area-inset-bottom,0px) + 12px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:6px;font-size:13px;z-index:40}
 /* quantity deals */
 .deal-top{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}
@@ -626,7 +631,12 @@ function zFor(p){
   if(p<=1-pl){q=p-.5;r=q*q;return(((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1)}
   q=Math.sqrt(-2*Math.log(1-p));return-(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
 }
-function toast(msg){const t=document.createElement('div');t.className='toast';t.setAttribute('role','status');t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
+function toast(msg,action){
+  $$('.toast').forEach(x=>x.remove());
+  const t=document.createElement('div');t.className='toast';t.setAttribute('role','status');t.textContent=msg;
+  if(action){const b=document.createElement('button');b.type='button';b.className='toast-act';b.textContent=action.label;b.onclick=()=>{t.remove();action.fn()};t.append(' ',b)}
+  document.body.appendChild(t);setTimeout(()=>t.remove(),action?6000:2600);
+}
 
 /* ---------- column detection ---------- */
 const INV_FIELDS=[
@@ -1255,7 +1265,7 @@ function forecastItem(it,ctx){
 /* ---------- rendering ---------- */
 const FLAG={
   onorder:['On your order','acc'],
-  oos:['Out of stock','crit'],risk:['Runs out before delivery','warn'],count:['Negative count','crit'],hold:['Not reordering','idle'],
+  oos:['Out of stock','crit'],risk:['Runs out before delivery','warn'],count:['Negative count','crit'],hold:['Suppressed','idle'],
   qd:['Quantity deal','ok'],new:['New item','acc'],dead:['No recent sales','idle'],over:['Overstocked','idle'],fixed:['Stockout days ignored','idle'],spread:['Period totals','idle']};
 const chips=(r,skip=[])=>'<div class="chips">'+r.flags.filter(f=>!skip.includes(f)).map(f=>`<span class="chip ${FLAG[f][1]}">${FLAG[f][0]}</span>`).join('')+'</div>';
 const dosTxt=d=>!isFinite(d)?'—':d>=999?'999+':int(d);
@@ -1459,12 +1469,20 @@ function orderCell(r){
 // last column on the Reorder and All items lists: add the item, or see what's already on the order
 function actionCell(r){
   if(r.ord>0)return `<td class="r act"><div class="on-order"><span>✓ ${qtyShort(r,r.ord)}</span><button class="x rm" type="button" data-unadd="${esc(r.key)}" aria-label="Take ${esc(r.it.name)} off your order" title="Take off your order">×</button></div>${r.qdId?'<div class="sub">in a QD</div>':''}</td>`;
-  if(r.held)return '<td class="r act"><span class="sub">not reordering</span></td>';
+  if(r.held)return `<td class="r act"><div class="act-btns"><span class="sub">Suppressed</span><button class="btn ghost small sup" type="button" data-unsup="${esc(r.key)}" title="Start suggesting this item again">Unsuppress</button></div></td>`;
   const u=r.units>0?r.units:stepOf(r);
-  return `<td class="r act"><button class="btn small add" type="button" data-add="${esc(r.key)}" data-u="${u}">Add ${qtyShort(r,u)}</button></td>`;
+  return `<td class="r act"><div class="act-btns"><button class="btn small add" type="button" data-add="${esc(r.key)}" data-u="${u}">Add ${qtyShort(r,u)}</button><button class="btn ghost small sup" type="button" data-sup="${esc(r.key)}" title="Stop suggesting this item in future orders">Suppress</button></div></td>`;
+}
+// suppressed items are never suggested again until unsuppressed (saved with the item's adjustments, so it's shared)
+function setSuppressed(key,on){
+  const o=Object.assign({},overrides[key]||{});
+  if(on)o.noReorder=true;else{o.noReorder=false}
+  overrides[key]=o;store.set('overrides',overrides);recompute();
 }
 function bindOrderButtons(el){
   $$('[data-add]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const r=S.res.byKey.get(b.dataset.add);setOrder(b.dataset.add,+b.dataset.u);toast(`Added ${r.it.name} to your order`)});
+  $$('[data-sup]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const k=b.dataset.sup,r=S.res.byKey.get(k);setSuppressed(k,true);toast(`Suppressed ${r.it.name}. It won’t be suggested again.`,{label:'Undo',fn:()=>setSuppressed(k,false)})});
+  $$('[data-unsup]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const k=b.dataset.unsup,r=S.res.byKey.get(k);setSuppressed(k,false);toast(`${r.it.name} will be suggested again when it needs ordering`,{label:'Undo',fn:()=>setSuppressed(k,true)})});
   $$('[data-unadd]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const r=S.res.byKey.get(b.dataset.unadd);setOrder(b.dataset.unadd,0);toast(`Took ${r.it.name} off your order`)});
   $$('[data-ostep]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const r=S.res.byKey.get(b.dataset.k);setOrder(r.key,r.ord+(+b.dataset.ostep)*stepOf(r))});
   $$('[data-oqty]',el).forEach(i=>{i.onclick=e=>e.stopPropagation();i.onchange=()=>{const r=S.res.byKey.get(i.dataset.oqty);if(i.value==='')return;setOrder(r.key,Math.max(0,Math.round(+i.value||0))*stepOf(r))}});
@@ -1530,7 +1548,9 @@ function renderView(){
   const cols=view==='dead'?8:13;
   const groupHtml=qdGroups.map(g=>qdHeadRow(g,cols)+g.rs.map(row).join('')).join('');
   const restHead=qdGroups.length&&shown.length?`<tr class="qd-head rest"><td colspan="${cols}"><b>Everything else</b></td></tr>`:'';
-  el.innerHTML=`<div class="tablewrap"><table class="items"><thead>${head}</thead><tbody>${groupHtml}${restHead}${shown.map(row).join('')}</tbody></table>${list.length||qdGroups.length?'':`<div class="empty">${emptyMsg}</div>`}${list.length>S.limit?`<div class="more"><button class="btn" id="btnMore" type="button">Show ${int(Math.min(200,list.length-S.limit))} more of ${int(list.length-S.limit)}</button></div>`:''}</div>`;
+  const nSup=view==='reorder'?r.results.filter(x=>x.held).length:0;
+  el.innerHTML=`<div class="tablewrap"><table class="items"><thead>${head}</thead><tbody>${groupHtml}${restHead}${shown.map(row).join('')}</tbody></table>${list.length||qdGroups.length?'':`<div class="empty">${emptyMsg}</div>`}${list.length>S.limit?`<div class="more"><button class="btn" id="btnMore" type="button">Show ${int(Math.min(200,list.length-S.limit))} more of ${int(list.length-S.limit)}</button></div>`:''}</div>${nSup?`<div class="supp-note">${int(nSup)} item${nSup===1?' is':'s are'} suppressed and won’t be suggested. <button class="btn ghost small" id="btnViewSup" type="button">View suppressed</button></div>`:''}`;
+  const vs=$('#btnViewSup');if(vs)vs.onclick=()=>goTab('all','hold');
   bindOrderButtons(el);
   $$('th[data-sort]',el).forEach(h=>h.onclick=()=>{const k=h.dataset.sort;const cur=S.sort[view];S.sort[view]=[k,cur[0]===k?-cur[1]:(['name','vendor','cls','dos','urg','last'].includes(k)?1:-1)];renderView()});
   $$('tbody tr[data-key]',el).forEach(tr=>tr.onclick=()=>openDetail(tr.dataset.key));
@@ -2147,7 +2167,7 @@ function openDetail(key){
   const it=r.it,ov=getOv(key),T=S.res.ctx.T;
   const rateLine=[r.w28&&`28 days: ${dec1(r.w28.r*7)}/wk`,r.w91&&`91 days: ${dec1(r.w91.r*7)}/wk`,!r.seasonal&&r.w365&&`365 days: ${dec1(r.w365.r*7)}/wk`].filter(Boolean).join(' · ');
   const runOut=isFinite(r.dos)&&r.base>0?fmtDay(T+Math.floor(r.dos)):'—';
-  const orderTxt=r.units?(r.byCase?`${r.cases} case${r.cases===1?'':'s'} × ${r.pack} = ${int(r.units)} units`:`${int(r.units)} units`):(r.held?'Not reordering (your setting)':r.base<=0?'No recent sales':'Nothing needed');
+  const orderTxt=r.units?(r.byCase?`${r.cases} case${r.cases===1?'':'s'} × ${r.pack} = ${int(r.units)} units`:`${int(r.units)} units`):(r.held?'Suppressed (your setting)':r.base<=0?'No recent sales':'Nothing needed');
   const d=openPanel(`
     <div class="drawer-head"><div><h2>${esc(it.name)}</h2><div class="sub">${esc([it.size,it.sku&&'#'+it.sku,it.upc&&'UPC '+it.upc].filter(Boolean).join(' · '))}</div></div><button class="btn ghost" data-close type="button">Close</button></div>
     <div class="row"><span class="abc ${r.cls}">${r.cls}</span><span class="hint">${esc(it.vendor)} · ${esc(it.category)}</span>${chips(r)}</div>
@@ -2157,7 +2177,7 @@ function openDetail(key){
       <div class="fact"><div class="k">Runs out</div><div class="v">${runOut}</div></div>
       <div class="fact"><div class="k">Next 30 / 60 / 90</div><div class="v">${int(r.f30)} / ${int(r.f60)} / ${int(r.f90)}</div></div>
     </div>
-    <div class="row order-row">${r.ord>0?`<span class="on-order">✓ ${qtyShort(r,r.ord)} on your order${r.qdId?' (in a QD)':''}</span><button class="btn small ghost" id="dOff" type="button">Take off the order</button>`:r.held?'<span class="hint">Not reordering (your setting)</span>':`<button class="btn primary" id="dAdd" type="button">Add ${qtyShort(r,r.units>0?r.units:stepOf(r))} to your order</button>${r.units>0?'<span class="hint">the suggested amount; change it on the order sheet</span>':''}`}</div>
+    <div class="row order-row">${r.ord>0?`<span class="on-order">✓ ${qtyShort(r,r.ord)} on your order${r.qdId?' (in a QD)':''}</span><button class="btn small ghost" id="dOff" type="button">Take off the order</button>`:r.held?'<span class="hint">Suppressed: won’t be suggested. Untick “Suppress” below to bring it back.</span>':`<button class="btn primary" id="dAdd" type="button">Add ${qtyShort(r,r.units>0?r.units:stepOf(r))} to your order</button>${r.units>0?'<span class="hint">the suggested amount; change it on the order sheet</span>':''}`}</div>
     <div><div class="legend"><span><i class="sw" style="background:var(--bar)"></i>Sold per week</span><span><i class="sw" style="background:var(--bar-fore)"></i>Forecast</span><span><i class="sw" style="background:repeating-linear-gradient(45deg,var(--crit) 0 1.5px,var(--crit-soft) 1.5px 4px)"></i>Out of stock, ignored</span></div>
     <div class="chart" id="chart"></div></div>
     <div><div class="label" style="margin-bottom:6px">How the order was worked out</div>
@@ -2177,7 +2197,7 @@ function openDetail(key){
       <div class="field"><label for="ovAdj">Expected demand change (%)</label><input id="ovAdj" type="number" step="5" value="${ov.adj||''}" placeholder="0"></div>
       <div class="field"><label for="ovPack">Units per case</label><input id="ovPack" type="number" min="1" step="1" value="${ov.pack??''}" placeholder="${r.pack}${r.packSrc==='est'?' (estimate)':''}"></div>
       <div class="field"><label for="ovVendor">Distributor for this item</label><input id="ovVendor" list="vendList" value="${esc(ov.vendor||'')}" placeholder="${esc(it.vendor)}"><datalist id="vendList">${[...new Set(S.res.results.map(x=>x.it.vendor).filter(v=>v!==NO_DIST))].sort().map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
-      <label class="check"><input id="ovHold" type="checkbox"${ov.noReorder?' checked':''}> Don’t reorder (allocated or discontinued)</label>
+      <label class="check"><input id="ovHold" type="checkbox"${ov.noReorder?' checked':''}> Suppress: don’t suggest this item again (allocated, discontinued, not carrying)</label>
     </div><p class="hint" style="margin-top:6px">Saved in this browser. Use the demand change for things the history can’t know, such as a nearby bar closing or a local event.</p></div>
     <div class="row" style="justify-content:space-between;border-top:1px solid var(--line);padding-top:12px">
       <span class="hint">${(()=>{const ds=[...qdList().map(o=>({name:o.name+' (on your order)',keys:o.items.map(i=>i.key)})),...dealsList()].filter(x=>x.keys.includes(key));return ds.length?'In '+ds.map(x=>esc(x.name)).join(', '):'Distributor running a quantity deal on this item?'})()}</span>
