@@ -1,16 +1,16 @@
 // Every /api request must come through Cloudflare Access. Access signs each request with a JWT;
 // we check that signature against the team's public keys, so the storage can't be reached around it.
 // If Access isn't configured yet (ACCESS_TEAM_DOMAIN / ACCESS_AUD unset), the API stays closed.
-import { json } from '../../lib/store.js';
+import { json } from './store.js';
 
 let certs = { url: '', keys: [], at: 0 };
 
-async function accessKeys(teamUrl, fresh) {
-  if (!fresh && certs.url === teamUrl && Date.now() - certs.at < 60 * 60 * 1000) return certs.keys;
-  const res = await fetch(`${teamUrl}/cdn-cgi/access/certs`);
+async function accessKeys(certsUrl, fresh) {
+  if (!fresh && certs.url === certsUrl && Date.now() - certs.at < 60 * 60 * 1000) return certs.keys;
+  const res = await fetch(certsUrl);
   if (!res.ok) throw new Error('could not load Access keys');
   const body = await res.json();
-  certs = { url: teamUrl, keys: body.keys || [], at: Date.now() };
+  certs = { url: certsUrl, keys: body.keys || [], at: Date.now() };
   return certs.keys;
 }
 
@@ -23,8 +23,9 @@ async function verifyAccessJwt(token, teamUrl, aud) {
   const header = b64urlJson(h);
   const payload = b64urlJson(p);
   if (header.alg !== 'RS256') throw new Error('unexpected algorithm');
-  let jwk = (await accessKeys(teamUrl, false)).find((k) => k.kid === header.kid);
-  if (!jwk) jwk = (await accessKeys(teamUrl, true)).find((k) => k.kid === header.kid); // keys rotate
+  const certsUrl = `${teamUrl}/cdn-cgi/access/certs`;
+  let jwk = (await accessKeys(certsUrl, false)).find((k) => k.kid === header.kid);
+  if (!jwk) jwk = (await accessKeys(certsUrl, true)).find((k) => k.kid === header.kid); // keys rotate
   if (!jwk) throw new Error('unknown signing key');
   const key = await crypto.subtle.importKey('jwk', jwk, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
   const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, b64urlBytes(sig), new TextEncoder().encode(`${h}.${p}`));
@@ -43,9 +44,10 @@ function cookie(request, name) {
   return m ? decodeURIComponent(m[1]) : '';
 }
 
-export async function onRequest(ctx) {
-  const { request, env } = ctx;
-  const team = (env.ACCESS_TEAM_DOMAIN || '').trim();
+// Returns the signed-in email, or a Response explaining why the request is refused.
+export async function authenticate(request, env) {
+  // accepts the team domain ("yourteam.cloudflareaccess.com") or the full key address Cloudflare shows
+  const team = (env.ACCESS_TEAM_DOMAIN || '').trim().replace(/\/cdn-cgi\/access\/certs\/?$/, '');
   const aud = (env.ACCESS_AUD || '').trim();
   if (!team || !aud) return json({ error: 'not_configured', message: 'Cloudflare Access isn’t set up for this site yet, so shared storage is off.' }, 503);
   if (!env.DATA) return json({ error: 'no_storage', message: 'The R2 bucket isn’t connected to this site yet.' }, 503);
@@ -53,9 +55,8 @@ export async function onRequest(ctx) {
   const token = request.headers.get('cf-access-jwt-assertion') || cookie(request, 'CF_Authorization');
   if (!token) return json({ error: 'unauthorized', message: 'Not signed in through Cloudflare Access.' }, 401);
   try {
-    ctx.data.user = await verifyAccessJwt(token, teamUrl, aud);
+    return { user: await verifyAccessJwt(token, teamUrl, aud) };
   } catch (e) {
     return json({ error: 'unauthorized', message: `Sign-in check failed: ${e.message}. Reload the page to sign in again.` }, 401);
   }
-  return ctx.next();
 }

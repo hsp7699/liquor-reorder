@@ -1,17 +1,23 @@
-# Cloudflare Pages project. The site is the single page in public/; the storage API is in functions/.
+# Cloudflare Worker: serves the planner page (public/) and the storage API (src/).
+# "name" must match the Worker's name in the Cloudflare dashboard.
 name = "liquor-reorder"
-pages_build_output_dir = "public"
-compatibility_date = "2024-09-23"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
 
-# Shared storage: create this bucket in R2 with exactly this name.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# Shared storage: create this bucket in R2 with exactly this name before deploying.
 [[r2_buckets]]
 binding = "DATA"
 bucket_name = "liquor-reorder-data"
 
 # Cloudflare Access settings. Until both are filled in, the storage API stays closed and the
 # planner keeps everything in each browser, like before.
-#   ACCESS_TEAM_DOMAIN: your Zero Trust team domain, e.g. "yourteam.cloudflareaccess.com"
-#   ACCESS_AUD: the Application Audience (AUD) tag from the Access application
+#   ACCESS_TEAM_DOMAIN: your team domain ("yourteam.cloudflareaccess.com") or the key address
+#                       Cloudflare shows ("https://yourteam.cloudflareaccess.com/cdn-cgi/access/certs")
+#   ACCESS_AUD: the audience (AUD) tag Cloudflare shows for the Access application
 [vars]
 ACCESS_TEAM_DOMAIN = ""
 ACCESS_AUD = ""

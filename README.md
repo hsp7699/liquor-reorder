@@ -4,7 +4,7 @@ A reorder planner for a liquor store running Advent POS. Load the **Item List Re
 **Item Sales Report** exports, and it forecasts what each item will sell over the next 30/60/90 days,
 suggests order quantities per distributor, and helps work out quantity deals (QDs).
 
-On the Cloudflare site, uploaded files, the order, QDs, saved deals and settings are kept in your own
+On the Cloudflare site (a Cloudflare Worker), uploaded files, the order, QDs, saved deals and settings are kept in your own
 Cloudflare R2 storage behind Cloudflare Access, so every computer you sign in on sees the same data.
 
 ## What's in here
@@ -12,10 +12,11 @@ Cloudflare R2 storage behind Cloudflare Access, so every computer you sign in on
 | Path | What it is |
 |---|---|
 | `app.html` | The whole planner: one page, no server needed. Edit this file. |
-| `public/index.html` | The Cloudflare site, built from `app.html` (don't edit by hand) |
-| `functions/api/` | The storage API Cloudflare runs next to the site |
-| `lib/store.js` | Shared code for the API (R2 reads and writes) |
-| `wrangler.toml` | Cloudflare settings: the R2 bucket and the Access settings |
+| `public/index.html` | The page the Cloudflare Worker serves, built from `app.html` (don't edit by hand) |
+| `src/worker.js` | The Cloudflare Worker: serves the page and routes `/api` to the storage API |
+| `src/api.js`, `src/store.js` | The storage API (R2 reads and writes) |
+| `src/auth.js` | Checks the Cloudflare Access sign-in on every `/api` request |
+| `wrangler.toml` | Cloudflare settings: the Worker, the R2 bucket and the Access settings |
 | `scripts/build.mjs` | Builds `public/index.html` from `app.html` |
 
 After changing `app.html`, run `node scripts/build.mjs` and commit both files.
@@ -24,16 +25,17 @@ After changing `app.html`, run `node scripts/build.mjs` and commit both files.
 
 1. **R2 bucket.** In the Cloudflare dashboard open **R2 Object Storage**, click **Create bucket** and name
    it exactly `liquor-reorder-data`. (The first time, Cloudflare asks for a payment card even for the
-   free tier. This planner uses a few dozen MB, well inside the free 10 GB.)
-2. **Pages project.** Open **Workers & Pages → Create → Pages → Connect to Git**, pick this repository,
-   leave the build command empty and deploy. Settings come from `wrangler.toml`. You get an address
-   like `liquor-reorder.pages.dev`.
-3. **Cloudflare Access.** In **Zero Trust → Access → Applications → Add an application → Self-hosted**,
-   protect `liquor-reorder.pages.dev` (and `*.liquor-reorder.pages.dev` for preview builds) with a policy
-   that allows only your email addresses.
-4. **Tell the API about Access.** Put your team domain (from **Zero Trust → Settings → Custom pages**,
-   like `yourteam.cloudflareaccess.com`) and the application's **Application Audience (AUD) Tag** into
-   `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` in `wrangler.toml`, commit and push. Neither is a secret.
+   free tier. This planner uses a few dozen MB, well inside the free 10 GB.) The Worker won't deploy
+   until the bucket exists.
+2. **Worker.** **Workers & Pages → Create → Import a repository**, pick this repository and deploy with
+   the default deploy command (`npx wrangler deploy`). The Worker's name must be `liquor-reorder`, the
+   `name` in `wrangler.toml`. You get an address like `liquor-reorder.<your-account>.workers.dev`.
+3. **Cloudflare Access.** Open the Worker → **Settings → Domains & Routes**, and next to **workers.dev**
+   click **Enable Cloudflare Access**. Then click **Manage Cloudflare Access** and set the email addresses
+   allowed in. Cloudflare shows the application's **audience (AUD) tag** and **JWKS URL**.
+4. **Tell the API about Access.** Put the JWKS URL (or just the team domain,
+   `yourteam.cloudflareaccess.com`) into `ACCESS_TEAM_DOMAIN` and the AUD tag into `ACCESS_AUD` in
+   `wrangler.toml`, commit and push. Neither is a secret.
 
 Until step 4 is done, the storage API refuses every request and the planner keeps data in each
 browser, so nothing is ever exposed by a half-finished setup.
@@ -42,7 +44,7 @@ browser, so nothing is ever exposed by a half-finished setup.
 
 - Every `/api` request must carry a valid Cloudflare Access sign-in. The API checks the token's
   signature against your team's public keys, its audience tag and its expiry
-  (`functions/api/_middleware.js`).
+  (`src/auth.js`).
 - Uploaded files are stored gzipped, exactly as exported, in `files/<id>`; `manifest.json` lists which
   ones are current. Each browser re-reads the original files, so improvements to the CSV reader apply
   to old uploads too.
@@ -57,5 +59,5 @@ browser, so nothing is ever exposed by a half-finished setup.
 
 ```sh
 node scripts/build.mjs
-npx wrangler pages dev --binding ACCESS_TEAM_DOMAIN=<team url> --binding ACCESS_AUD=<aud>
+npx wrangler dev --var ACCESS_TEAM_DOMAIN:<team domain> --var ACCESS_AUD:<aud tag>
 ```
