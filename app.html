@@ -1,0 +1,2402 @@
+<title>Liquor Reorder Planner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one working column (data sources, summary tiles, tabbed item table); item detail and settings slide in from the right like a clipboard */
+:root{
+  --bg:#f2f4f3; --surface:#ffffff; --sunk:#e8ecea; --ink:#16201c; --ink-2:#45534d; --muted:#67756f; --line:#d6ddd9;
+  --accent:#1f4f8a; --accent-ink:#ffffff; --accent-soft:#e2ebf6;
+  --crit:#b42318; --crit-soft:#fce6e2; --warn:#8f5f00; --warn-soft:#fbefd2; --ok:#2b7a4b; --ok-soft:#e0f1e6; --idle:#5c6863; --idle-soft:#e9ecea;
+  --bar:#1f4f8a; --bar-fore:#a9bfdc; --scrim:rgba(14,20,18,.38); --shadow:0 10px 40px rgba(16,24,20,.18);
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1312; --surface:#161d1b; --sunk:#1e2624; --ink:#e5ebe8; --ink-2:#b7c3be; --muted:#8a9893; --line:#2b3633;
+  --accent:#86b4ea; --accent-ink:#0e1312; --accent-soft:#1b2a3c;
+  --crit:#f2857a; --crit-soft:#3a1c19; --warn:#e3b04b; --warn-soft:#33290f; --ok:#6cc28f; --ok-soft:#15301f; --idle:#9ba7a2; --idle-soft:#232c2a;
+  --bar:#86b4ea; --bar-fore:#34506f; --scrim:rgba(0,0,0,.55); --shadow:0 10px 40px rgba(0,0,0,.5); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1312; --surface:#161d1b; --sunk:#1e2624; --ink:#e5ebe8; --ink-2:#b7c3be; --muted:#8a9893; --line:#2b3633;
+  --accent:#86b4ea; --accent-ink:#0e1312; --accent-soft:#1b2a3c;
+  --crit:#f2857a; --crit-soft:#3a1c19; --warn:#e3b04b; --warn-soft:#33290f; --ok:#6cc28f; --ok-soft:#15301f; --idle:#9ba7a2; --idle-soft:#232c2a;
+  --bar:#86b4ea; --bar-fore:#34506f; --scrim:rgba(0,0,0,.55); --shadow:0 10px 40px rgba(0,0,0,.5); color-scheme:dark}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body)}
+.wrap{max-width:1320px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 56px;display:flex;flex-direction:column;gap:18px}
+h1,h2,h3{margin:0;text-wrap:balance}
+.num,.mono{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--f-mono)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.brand h1{font-family:var(--f-display);font-weight:700;font-size:32px;letter-spacing:.04em;text-transform:uppercase;line-height:1}
+.brand p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--line);background:var(--surface);border-radius:6px;cursor:pointer;font-weight:500;font-size:13px;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--ink-2)}
+.btn.ghost:hover{background:var(--sunk)}
+.btn.small{padding:4px 9px;font-size:12px}
+
+/* sample banner */
+.banner{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-radius:8px;background:var(--accent-soft);color:var(--ink);font-size:13px}
+.banner b{font-weight:600}
+
+/* data sources */
+.sources{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.src{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.src.drag{border-color:var(--accent);background:var(--accent-soft)}
+.src-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.label{font-family:var(--f-display);font-weight:600;text-transform:uppercase;letter-spacing:.08em;font-size:14px;color:var(--ink-2)}
+.src p{margin:0;color:var(--muted);font-size:12.5px}
+.files{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
+.files li{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;padding:5px 8px;background:var(--sunk);border-radius:5px;min-width:0}
+.files li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.files li small{color:var(--muted);white-space:nowrap}
+.x{border:0;background:none;cursor:pointer;color:var(--muted);padding:0 4px;font-size:16px;line-height:1}
+.x:hover{color:var(--crit)}
+.confirm{border:1px solid var(--crit);background:var(--crit-soft);border-radius:6px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;font-size:13px}
+.confirm p{margin:0;color:var(--ink)}
+.btn.danger{background:var(--crit);border-color:var(--crit);color:var(--surface)}
+.sync{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);padding:6px 10px;border-radius:999px;background:var(--sunk);align-self:center;white-space:nowrap}
+.sync::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--idle)}
+.sync.ok::before{background:var(--ok)}.sync.busy::before{background:var(--warn)}.sync.err{color:var(--crit)}.sync.err::before{background:var(--crit)}
+.banner.migrate{flex-direction:column;align-items:flex-start;gap:8px;background:var(--warn-soft)}
+.matchline{font-size:12.5px;color:var(--ink-2);display:flex;flex-wrap:wrap;gap:4px 14px}
+details.unmatched summary{cursor:pointer;color:var(--warn);font-size:12.5px}
+details.unmatched ul{margin:6px 0 0;padding-left:18px;font-size:12.5px;color:var(--ink-2);max-height:160px;overflow:auto}
+
+/* column mapper */
+.mapper{background:var(--surface);border:2px solid var(--accent);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.mapper h3{font-size:16px}
+.map-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px 14px}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field label{font-size:12px;color:var(--ink-2);font-weight:500}
+.field label i{color:var(--crit);font-style:normal}
+.field select,.field input{padding:6px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);min-width:0;width:100%}
+.preview{overflow-x:auto;border:1px solid var(--line);border-radius:6px}
+.preview table{border-collapse:collapse;font-size:12px;min-width:100%}
+.preview th,.preview td{padding:4px 8px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:left}
+.preview th{background:var(--sunk);font-weight:600}
+.preview th.used{background:var(--accent-soft)}
+.err{color:var(--crit);font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* KPI tiles */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(136px,1fr));gap:10px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;min-width:0;text-align:left;cursor:pointer}
+.kpi:hover{border-color:var(--muted)}
+.kpi .k{display:flex;align-items:center;gap:6px;font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-2);font-weight:500}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--idle);flex:none}
+.dot.ok{background:var(--ok)}.dot.crit{background:var(--crit)}.dot.warn{background:var(--warn)}.dot.acc{background:var(--accent)}
+.kpi .v{font-family:var(--f-display);font-weight:600;font-size:32px;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:12px;color:var(--muted)}
+
+/* tabs + filters */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{border:0;background:none;padding:9px 14px;cursor:pointer;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tab .c{font-size:11px;background:var(--sunk);border-radius:999px;padding:1px 7px;margin-left:4px;color:var(--ink-2)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filters input,.filters select{padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);min-width:0}
+.filters input{flex:1 1 220px}
+.filters .spacer{flex:1}
+.totals{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:baseline;font-size:13px;color:var(--ink-2);margin-top:-6px}
+.totals b{font-family:var(--f-mono);font-weight:500;font-size:14px;color:var(--ink);font-variant-numeric:tabular-nums}
+
+/* table */
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+table.items{border-collapse:collapse;width:100%;min-width:980px}
+table.items th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--surface);user-select:none}
+table.items th[data-sort]{cursor:pointer}
+table.items th[data-sort]:hover{color:var(--ink)}
+table.items th.r,table.items td.r{text-align:right}
+table.items th .arr{color:var(--accent)}
+table.items td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.items tbody tr{cursor:pointer}
+table.items tbody tr:hover td{background:var(--sunk)}
+table.items tbody tr:last-child td{border-bottom:0}
+td.r{font-variant-numeric:tabular-nums;font-family:var(--f-mono);font-size:13px;white-space:nowrap}
+.nm{font-weight:500}
+.sub{font-size:11.5px;color:var(--muted);font-family:var(--f-mono)}
+td.order b{font-family:var(--f-mono);font-weight:500;font-size:14px}
+.abc{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:4px;font-size:11px;font-weight:600;background:var(--sunk);color:var(--ink-2)}
+.abc.A{background:var(--accent);color:var(--accent-ink)}
+.abc.B{background:var(--accent-soft);color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{display:inline-flex;align-items:center;font-size:11px;font-weight:500;padding:2px 7px;border-radius:999px;white-space:nowrap;background:var(--idle-soft);color:var(--idle)}
+.chip.crit{background:var(--crit-soft);color:var(--crit)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.acc{background:var(--accent-soft);color:var(--accent)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.more{display:flex;justify-content:center;padding:12px}
+.empty{padding:40px 16px;text-align:center;color:var(--muted)}
+
+/* order sheets */
+.sheets{display:flex;flex-direction:column;gap:14px}
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.sheet-head{display:flex;flex-wrap:wrap;gap:8px 16px;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.sheet-head h3{font-family:var(--f-display);font-size:20px;font-weight:600;letter-spacing:.02em}
+.sheet-meta{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2)}
+.sheet .tablewrap{border:0;border-radius:0}
+.sheet table.items{min-width:720px}
+
+/* how it works */
+.prose{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px 22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px 32px}
+.prose section{max-width:62ch;min-width:0}
+.prose h3{font-family:var(--f-display);font-size:19px;font-weight:600;letter-spacing:.02em;margin-bottom:6px}
+.prose p,.prose li{color:var(--ink-2);font-size:13.5px}
+.prose p{margin:0 0 8px}
+.prose ul{margin:0 0 8px;padding-left:18px}
+.formula{font-family:var(--f-mono);font-size:12.5px;background:var(--sunk);padding:8px 10px;border-radius:6px;color:var(--ink)}
+
+/* drawer */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:20}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(620px,100%);background:var(--surface);z-index:21;box-shadow:var(--shadow);overflow-y:auto;
+  padding-top:max(18px,calc(env(safe-area-inset-top,0px) + 12px));padding-bottom:max(24px,env(safe-area-inset-bottom,0px));padding-left:20px;padding-right:max(20px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
+.drawer-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.drawer-head h2{font-family:var(--f-display);font-size:26px;font-weight:600;letter-spacing:.01em;line-height:1.1}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.sw{width:12px;height:12px;border-radius:2px;display:inline-block}
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto}
+.chart text{fill:var(--muted);font-family:var(--f-mono);font-size:10px}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;padding:5px 8px;border-radius:5px;white-space:nowrap;transform:translate(-50%,-100%);z-index:2}
+.math{display:grid;grid-template-columns:minmax(0,1fr) auto;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.math div{padding:8px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.math div:nth-last-child(-n+2){border-bottom:0}
+.math .mv{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.math .mk small{display:block;color:var(--muted);font-size:11.5px}
+.math .total{background:var(--accent-soft);font-weight:600}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.fact{background:var(--sunk);border-radius:6px;padding:8px 10px}
+.fact .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.fact .v{font-family:var(--f-mono);font-size:15px}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end}
+.check{display:flex;gap:8px;align-items:center;font-size:13px}
+.check input{width:16px;height:16px}
+.settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 14px}
+.hint{font-size:12px;color:var(--muted);margin:0}
+table.vend{border-collapse:collapse;width:100%;min-width:520px;font-size:13px}
+table.vend th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:6px;border-bottom:1px solid var(--line)}
+table.vend td{padding:5px 6px;border-bottom:1px solid var(--line)}
+table.vend input,table.vend select{width:100%;padding:5px 6px;border:1px solid var(--line);border-radius:5px;background:var(--surface)}
+table.vend input{max-width:90px}
+.toast{position:fixed;left:50%;bottom:max(20px,calc(env(safe-area-inset-bottom,0px) + 12px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:6px;font-size:13px;z-index:40}
+/* quantity deals */
+.deal-top{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}
+.rec{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:2px}
+.rec b{font-size:15px}
+.rec.good{background:var(--ok-soft)}.rec.skip{background:var(--idle-soft)}.rec.bad{background:var(--warn-soft)}
+table.items tr.best td{background:var(--accent-soft)}
+table.items.plain tbody tr{cursor:default}
+#qqOut tbody tr{cursor:pointer}
+#qqOut tbody tr:not(.needs-review):hover td{background:var(--sunk)}
+#qqOut .stepper,#qqOut .why{cursor:default}
+.cand{display:flex;flex-direction:column;gap:2px;max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:4px}
+.cand label{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:8px;align-items:center;padding:5px 6px;border-radius:4px;font-size:13px;cursor:pointer}
+.cand label:hover{background:var(--sunk)}
+.cand small{color:var(--muted);font-family:var(--f-mono);font-size:11.5px;white-space:nowrap}
+.results{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.results button{flex:none;border:0;border-bottom:1px solid var(--line);background:var(--surface);text-align:left;padding:7px 10px;cursor:pointer;font-size:13px}
+.results button:last-child{border-bottom:0}
+.results button:hover{background:var(--sunk)}
+#quick{overflow:visible}
+.results{max-height:min(340px,50vh);overflow-y:auto;overscroll-behavior:contain;background:var(--surface)}
+.stepper{display:inline-flex;align-items:stretch;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface)}
+.stepper button{border:0;background:var(--sunk);width:32px;min-height:32px;font-size:16px;cursor:pointer;color:var(--ink)}
+.stepper button:hover{background:var(--accent-soft)}
+.stepper input{width:52px;border:0;border-inline:1px solid var(--line);text-align:center;font-family:var(--f-mono);font-size:14px;background:transparent;-moz-appearance:textfield;appearance:textfield}
+.stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.stepper.set{border-color:var(--accent)}
+.stepper.set input{font-weight:600;color:var(--accent)}
+.qq-bar{display:flex;flex-wrap:wrap;gap:10px 16px;justify-content:space-between;align-items:center;padding:12px 14px;border-top:1px solid var(--line);margin-top:12px}
+.qq-bar b{font-family:var(--f-mono);font-weight:500}
+.needs-review td{background:var(--crit-soft)}
+table.items tbody tr.needs-review:hover td{background:var(--crit-soft)}
+.why{color:var(--crit);font-size:12.5px;margin-top:4px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;max-width:52ch}
+.why.ok{color:var(--ink-2)}
+.suggest-note{padding:8px 14px 0;color:var(--ink-2)}
+.order-row{gap:10px}
+.on-order{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--accent);font-weight:500}
+td.act{white-space:nowrap}
+.btn.add{min-width:84px;justify-content:center}
+.x.rm{font-size:18px;padding:0 2px;line-height:1}
+.qq-onorder{padding:0 14px 12px;font-size:13px;color:var(--ink-2)}
+tr.qd-head td{background:var(--ok-soft);padding:8px 10px;border-bottom:1px solid var(--line)}
+tr.qd-head.rest td{background:var(--sunk)}
+tr.qd-head:hover td{background:var(--ok-soft)}
+tr.qd-head.rest:hover td{background:var(--sunk)}
+.qd-bar{display:flex;flex-wrap:wrap;gap:8px 16px;justify-content:space-between;align-items:center}
+.quick-form{display:flex;flex-wrap:wrap;gap:12px 14px;align-items:flex-end;padding:14px;border-bottom:1px solid var(--line)}
+.quick-form .field{flex:1 1 120px}
+.quick-form .qf-item{flex:3 1 260px;position:relative}
+.quick-form .qf-item .results{position:absolute;left:0;right:0;top:100%;z-index:5;margin-top:4px;box-shadow:var(--shadow)}
+.quick-form .field input,.quick-form .field select{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);width:100%}
+.qf-checks{display:flex;gap:14px;flex-wrap:wrap;padding-bottom:7px}
+.mixctl{position:relative;display:inline-flex;align-items:center;gap:2px}
+.mixctl.off .check{color:var(--muted);opacity:.6}
+.caret{border:1px solid var(--line);background:var(--surface);border-radius:5px;width:24px;height:24px;cursor:pointer;color:var(--ink-2);font-size:12px;line-height:1;padding:0}
+.caret:hover:not(:disabled){border-color:var(--muted)}
+.caret:disabled{opacity:.4;cursor:default}
+.mixpop{position:absolute;top:calc(100% + 6px);left:0;z-index:8;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);padding:10px 12px;min-width:240px;max-width:min(340px,86vw);max-height:min(360px,60vh);overflow:auto;display:flex;flex-direction:column;gap:6px}
+.mixpop-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;margin-bottom:2px}
+.mixpop .check{font-size:13px}
+.qf-add{padding:12px 14px 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px;max-width:520px}
+.qf-add input{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);width:100%}
+.tiers{display:flex;flex-direction:column;gap:6px}
+.tier{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.3fr) auto;gap:8px;align-items:end}
+.toggles{display:flex;flex-wrap:wrap;gap:8px 18px}
+.claude-box{border:1px dashed var(--line);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.claude-box textarea{width:100%;min-height:70px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font:inherit;font-size:13px}
+textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12px;border:1px solid var(--line);border-radius:6px;padding:8px;background:var(--sunk);color:var(--ink)}
+@media (max-width:600px){.brand h1{font-size:26px}.kpi .v{font-size:26px}}
+@media (prefers-reduced-motion:no-preference){.drawer{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(24px);opacity:.6}}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>Liquor Reorder Planner</h1>
+      <p id="subline">Loading…</p>
+    </div>
+    <div class="actions">
+      <span class="sync" id="syncStatus" role="status" hidden></span>
+      <button class="btn" id="btnSettings" type="button">Settings</button>
+    </div>
+  </header>
+
+  <div class="banner migrate" id="migrate" hidden></div>
+  <div class="banner" id="sampleBanner" hidden>
+    <div><b>This is sample data for a made-up store.</b> Load your Advent inventory and sales exports below to replace it. Files are read in this browser only and are never uploaded.</div>
+  </div>
+
+  <div class="sources">
+    <div class="src" id="srcInv">
+      <div class="src-head"><span class="label">Inventory list</span><button class="btn small" id="btnInv" type="button">Choose file</button></div>
+      <ul class="files" id="invFiles"></ul>
+      <p>Advent’s Item List Report with current quantities. Export a fresh one each time you plan an order. CSV or Excel.</p>
+      <input type="file" id="fileInv" accept=".csv,.txt,.tsv,.xls,.xlsx,.pdf" hidden>
+    </div>
+    <div class="src" id="srcSales">
+      <div class="src-head"><span class="label">Sales history</span><div class="row"><button class="btn small ghost" id="btnClearSales" type="button" hidden>Clear all</button><button class="btn small" id="btnSales" type="button">Add files</button></div></div>
+      <div class="confirm" id="salesConfirm" role="alertdialog" aria-live="polite" hidden></div>
+      <ul class="files" id="salesFiles"></ul>
+      <p>Advent’s Departmentwise Item Sales report, one file per week, as far back as you can. Two years lets the planner learn your seasons. Select many files at once.</p>
+      <input type="file" id="fileSales" accept=".csv,.txt,.tsv,.xls,.xlsx,.pdf" multiple hidden>
+    </div>
+  </div>
+  <div class="row" style="justify-content:space-between"><div id="matchInfo"></div><button class="btn ghost small" id="btnClear" type="button" hidden>Clear loaded data</button></div>
+  <div id="mapper"></div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+  </div>
+  <div class="filters" id="filters">
+    <input type="search" id="q" placeholder="Search item, SKU or UPC" aria-label="Search items">
+    <select id="fVendor" aria-label="Filter by vendor"></select>
+    <select id="fCat" aria-label="Filter by category"></select>
+    <select id="fFlag" aria-label="Filter by status"></select>
+    <span class="spacer"></span>
+    <button class="btn ghost" id="btnClearOrder" type="button" hidden>Clear order</button>
+    <button class="btn" id="btnExportAll" type="button">Download all orders (CSV)</button>
+  </div>
+  <div class="totals" id="totals" hidden></div>
+  <div id="view"></div>
+</div>
+
+<div id="overlay" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(function(){
+"use strict";
+const $=(s,el=document)=>el.querySelector(s);
+const $$=(s,el=document)=>Array.from(el.querySelectorAll(s));
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store={get(k,d){try{const v=localStorage.getItem('lrp.'+k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem('lrp.'+k,JSON.stringify(v))}catch(e){}cloudQueue(k,v)}};
+const dlP=(window.claude&&window.claude.use)?window.claude.use('downloads').catch(()=>null):Promise.resolve(null);
+
+/* ---------- settings ---------- */
+const DEFAULTS={svcA:98,svcB:95,svcC:90,overstockDays:120,deadDays:90,roundUp:30,defaultPack:1,useSeason:true,estPack:true,holdRate:20};
+const VDEF={lead:3,cycle:7,min:0,by:'case'};
+const NO_DIST='No distributor set';
+let settings=Object.assign({},DEFAULTS,store.get('settings',{}));
+let vendorCfg=store.get('vendors',{});
+let overrides=store.get('overrides',{});
+let deptCfg=store.get('depts',{});
+let deals=store.get('deals',[]);
+let SAMPLE_DEALS=[];
+const dealsList=()=>S.sample?SAMPLE_DEALS:deals;
+// quick QD checks added to the order: {id,name,anchor,keys,qty,countIn,disc,added}
+let qdOrders=store.get('qdorders',[]).filter(o=>Array.isArray(o.items)),SAMPLE_QD=[];
+const qdList=()=>S.sample?SAMPLE_QD:qdOrders;
+const saveQd=()=>{if(!S.sample)store.set('qdorders',qdOrders)};
+// your order: nothing goes on it until you add it (item key -> units)
+let cart=store.get('cart',{}),SAMPLE_CART={};
+const cartObj=()=>S.sample?SAMPLE_CART:cart;
+const saveCart=()=>{if(!S.sample)store.set('cart',cart)};
+const saveCartForce=()=>store.set('cart',cart);
+// the sample store opens with its urgent items already on the order, so the order sheets aren't empty
+function seedSampleCart(){if(!S.sample||!S.res)return;SAMPLE_CART={};for(const r of S.res.results)if(r.urg<=1&&r.units>0)SAMPLE_CART[r.key]=r.units;recompute()}
+// set how much of an item is on the order; items in a QD change inside that QD
+function setOrder(key,units){
+  const r=S.res&&S.res.byKey.get(key);if(!r)return;
+  units=Math.max(0,Math.round(units));
+  if(r.qdId){
+    const list=qdList(),o=list.find(x=>x.id===r.qdId);
+    if(o){const it=o.items.find(i=>i.key===key);if(it)it.units=units;o.items=o.items.filter(i=>i.units>0);if(!o.items.length)list.splice(list.indexOf(o),1);saveQd()}
+  }else{const c=cartObj();if(units>0)c[key]=units;else delete c[key];saveCart()}
+  refreshOrders();
+}
+// order changes reuse the forecast; only the deal and order quantities are applied again
+function refreshOrders(){if(!S.res){recompute();return}applyDeals();renderAll()}
+const qtyShort=(r,u)=>r.byCase?`${int(u/r.pack)} cs`:`${int(u)} unit${u===1?'':'s'}`;
+const samplerP=(window.claude&&window.claude.use)?window.claude.use('sample').catch(()=>null):Promise.resolve(null);
+const deptOf=d=>Object.assign({vendor:'',skip:/^(misc fee|fees?)$/i.test(d)},deptCfg[d]||{});
+
+/* loaded files are kept in this browser (IndexedDB) so weekly updates only need the newest week */
+const idb={
+  open(){return new Promise((res,rej)=>{const r=indexedDB.open('lrp',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})},
+  async get(k){try{const db=await this.open();return await new Promise((res,rej)=>{const t=db.transaction('kv').objectStore('kv').get(k);t.onsuccess=()=>res(t.result);t.onerror=()=>rej(t.error)})}catch(e){return null}},
+  async set(k,v){try{const db=await this.open();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)});return true}catch(e){return false}}
+};
+function persist(){if(!S.sample&&!cloud.on)idb.set('data',{inv:S.inv,sales:S.sales})}
+
+/* ---------- shared storage (the Cloudflare site) ---------- */
+// On the Cloudflare site, uploaded files, the order, QDs, saved deals and settings live in your R2 bucket,
+// so every computer you sign in on sees the same thing. Anywhere else (claude.ai, a saved copy), the
+// storage API isn't there and everything stays in this browser as before.
+var cloud={on:false,user:'',maps:{},manifest:null,want:{},timers:{},saving:0,error:'',off:''};
+const SYNCED=['settings','vendors','overrides','depts','deals','qdorders','cart'];
+const LISTS=['deals','qdorders'];   // kept in order; stored as id -> item
+async function api(path,opts={}){
+  const r=await fetch('/api/'+path,Object.assign({credentials:'same-origin',cache:'no-store'},opts));
+  if(!r.ok){let j={};try{j=await r.json()}catch(e){}const err=new Error(j.message||('Shared storage answered '+r.status));err.status=r.status;err.code=j.error;throw err}
+  return r;
+}
+const toMap=(k,v)=>LISTS.includes(k)?Object.fromEntries((v||[]).map((o,i)=>[o.id,Object.assign({},o,{_ord:i})])):Object.assign({},v||{});
+const fromMap=(k,m)=>LISTS.includes(k)?Object.values(m||{}).sort((a,b)=>(a._ord??0)-(b._ord??0)).map(o=>{const c=Object.assign({},o);delete c._ord;return c}):Object.assign({},m||{});
+function useMaps(names){
+  for(const k of names){
+    const v=fromMap(k,cloud.maps[k]);
+    if(k==='settings')settings=Object.assign({},DEFAULTS,v);
+    else if(k==='vendors')vendorCfg=v;else if(k==='overrides')overrides=v;else if(k==='depts')deptCfg=v;
+    else if(k==='deals')deals=v;else if(k==='qdorders')qdOrders=v.filter(o=>Array.isArray(o.items));else if(k==='cart')cart=v;
+  }
+}
+// send only the entries that changed; the server applies them on top of what others saved
+function cloudQueue(k,v){
+  if(!cloud||!cloud.on||!SYNCED.includes(k)||S.sample&&(k==='cart'||k==='deals'||k==='qdorders'))return;
+  cloud.want[k]=v;clearTimeout(cloud.timers[k]);cloud.timers[k]=setTimeout(()=>cloudPush(k),350);syncStatus();
+}
+async function cloudPush(k){
+  if(!(k in cloud.want))return;
+  const next=toMap(k,cloud.want[k]),prev=cloud.maps[k]||{},set={},del=[];
+  for(const [key,val] of Object.entries(next))if(JSON.stringify(val)!==JSON.stringify(prev[key]))set[key]=val;
+  for(const key of Object.keys(prev))if(!(key in next))del.push(key);
+  delete cloud.want[k];
+  if(!Object.keys(set).length&&!del.length){syncStatus();return}
+  cloud.saving++;syncStatus();
+  try{
+    const {map}=await (await api('state/'+k,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({set,del})})).json();
+    cloud.maps[k]=map;cloud.error='';
+    // someone else changed other entries in the meantime: take their version too
+    if(JSON.stringify(map)!==JSON.stringify(next)&&!(k in cloud.want)){useMaps([k]);afterRemote([k])}
+  }catch(e){
+    cloud.error=e.message;if(!(k in cloud.want))cloud.want[k]=fromMap(k,next);
+    clearTimeout(cloud.timers[k]);cloud.timers[k]=setTimeout(()=>cloudPush(k),8000);
+  }finally{cloud.saving--;syncStatus()}
+}
+function afterRemote(names){
+  if(names.some(k=>['settings','vendors','overrides','depts'].includes(k)))recompute();
+  else if(S.res)refreshOrders();
+}
+async function gz(buf){return new Response(new Blob([buf]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()}
+async function gunzip(buf){return new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()}
+const newId=()=>(crypto.randomUUID?crypto.randomUUID():String(Math.random()).slice(2)+Date.now()).replace(/-/g,'').slice(0,24);
+// a stored file back into what the planner works with; parsed results are cached in this browser
+async function fileFromCloud(meta){
+  const cached=await idb.get('cf:'+meta.id);if(cached)return cached;
+  const bytes=await gunzip(await (await api('files/'+meta.id)).arrayBuffer());
+  let out;
+  if(meta.type==='parsed')out=JSON.parse(new TextDecoder().decode(bytes));
+  else{
+    const rows=await readTable(new File([bytes],meta.fileName));
+    const p={kind:meta.kind,fileName:meta.fileName,rows};
+    setHeader(p,meta.headerIdx||0);
+    p.map={};for(const [f,h] of Object.entries(meta.map||{})){const i=p.headers.indexOf(h);if(i>=0)p.map[f]=i}
+    if(meta.kind==='sales'){p.from=meta.from;p.to=meta.to}
+    out=applyPending(p);
+  }
+  out.id=meta.id;idb.set('cf:'+meta.id,out);return out;
+}
+async function loadManifest(m){
+  const metas=[...(m.inventory?[m.inventory]:[]),...(m.sales||[])];
+  let done=0;const outs=new Map(),failed=[];
+  const sub=$('#subline');
+  const work=metas.slice();
+  async function worker(){while(work.length){const meta=work.shift();try{outs.set(meta.id,await fileFromCloud(meta))}catch(e){failed.push(meta.fileName+': '+e.message)}done++;if(metas.length>3)sub.textContent=`Loading shared files ${done} of ${metas.length}…`}}
+  await Promise.all(Array.from({length:Math.min(6,metas.length)},worker));
+  if(failed.length)toast(`Couldn’t load ${failed.length} shared file${failed.length===1?'':'s'}: ${failed[0]}`);
+  const inv=m.inventory&&outs.get(m.inventory.id)||null;
+  const sales=(m.sales||[]).map(f=>outs.get(f.id)).filter(Boolean);
+  if(inv||sales.length){S.sample=false;S.inv=inv;S.sales=sales}
+  else{const smp=makeSample();S.sample=true;S.inv=smp.inv;S.sales=smp.sales}
+  cloud.manifest=m;
+  // drop cached copies of files that are no longer shared
+  const keep=new Set(metas.map(x=>x.id)),old=await idb.get('cf:index')||[];
+  for(const id of old)if(!keep.has(id))idb.set('cf:'+id,null);
+  idb.set('cf:index',[...keep]);
+}
+async function manifestOp(op){
+  if(!cloud.on)return;
+  cloud.saving++;syncStatus();
+  try{const {manifest}=await (await api('manifest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(op)})).json();cloud.manifest=manifest;cloud.error=''}
+  catch(e){cloud.error=e.message;toast('Couldn’t update shared storage: '+e.message)}
+  finally{cloud.saving--;syncStatus()}
+}
+// after files are added in the column matcher: store each original file, then list them
+async function cloudUpload(items){
+  if(!cloud.on||!items.length)return;
+  cloud.saving++;syncStatus();
+  const metas=[];let failed=0;
+  const work=items.slice();
+  async function worker(){while(work.length){const {x,out,named}=work.shift();
+    try{
+      const raw=x.file?await x.file.arrayBuffer():null;
+      const body=raw?await gz(raw):await gz(new TextEncoder().encode(JSON.stringify(out)));
+      await api('files/'+out.id,{method:'PUT',body});
+      metas.push({id:out.id,kind:x.kind,type:raw?'raw':'parsed',fileName:x.fileName,headerIdx:x.headerIdx,map:named,from:x.from??null,to:x.to??null,_i:items.indexOf(items.find(i=>i.out===out))});
+      idb.set('cf:'+out.id,out);
+    }catch(e){failed++;cloud.error=e.message}}}
+  await Promise.all(Array.from({length:Math.min(4,items.length)},worker));
+  metas.sort((a,b)=>a._i-b._i);metas.forEach(m=>delete m._i);
+  const inv=metas.find(m=>m.kind==='inv'),sales=metas.filter(m=>m.kind==='sales');
+  cloud.saving--;
+  if(inv)await manifestOp({setInventory:inv});
+  if(sales.length)await manifestOp({addSales:sales});
+  if(failed)toast(`${failed} file${failed===1?'':'s'} couldn’t be saved to shared storage and only ${failed===1?'is':'are'} in this browser. Add ${failed===1?'it':'them'} again to retry.`);
+  else toast(`Saved ${metas.length} file${metas.length===1?'':'s'} to shared storage`);
+  syncStatus();
+}
+async function cloudPull(){
+  if(!cloud.on||cloud.saving||Object.keys(cloud.want).length||S.pending.length)return;
+  try{
+    const j=await (await api('state')).json();cloud.error='';
+    const changed=SYNCED.filter(k=>!(k in cloud.want)&&JSON.stringify(j.maps[k]||{})!==JSON.stringify(cloud.maps[k]||{}));
+    changed.forEach(k=>{cloud.maps[k]=j.maps[k]||{}});
+    if(JSON.stringify(j.manifest)!==JSON.stringify(cloud.manifest)){useMaps(changed);await loadManifest(j.manifest);recompute();if(S.sample)seedSampleCart()}
+    else if(changed.length){useMaps(changed);afterRemote(changed)}
+    cloud.last=Date.now();
+  }catch(e){cloud.error=e.message;if(e.status===401)cloud.off='Your sign-in expired. Reload the page to sign in again.'}
+  syncStatus();
+}
+function syncStatus(){
+  const el=$('#syncStatus');if(!el)return;
+  if(!cloud.on){el.hidden=!cloud.off;el.className='sync off';el.textContent=cloud.off?'Saved in this browser only':'';el.title=cloud.off||'';return}
+  el.hidden=false;
+  const pending=cloud.saving||Object.keys(cloud.want).length;
+  el.className='sync '+(cloud.error?'err':pending?'busy':'ok');
+  el.textContent=cloud.error?'Not saved yet, retrying':pending?'Saving…':'Shared storage';
+  el.title=cloud.error?cloud.error:`Files, your order, QDs and settings are saved to your Cloudflare storage${cloud.user?' · signed in as '+cloud.user:''}.`;
+}
+// first visit after switching on shared storage: offer to copy what this browser already has
+async function offerMigration(){
+  const saved=await idb.get('data');
+  const local={};for(const k of SYNCED){const v=store.get(k,null);if(v&&(Array.isArray(v)?v.length:Object.keys(v).length))local[k]=v}
+  const hasFiles=saved&&(saved.inv||(saved.sales||[]).length);
+  const cloudEmpty=!cloud.manifest.inventory&&!(cloud.manifest.sales||[]).length&&SYNCED.every(k=>!Object.keys(cloud.maps[k]||{}).length);
+  if(!cloudEmpty||(!hasFiles&&!Object.keys(local).length)||store.get('migrated',false))return;
+  const el=$('#migrate');el.hidden=false;
+  el.innerHTML=`<div><b>This browser has data saved from before shared storage was on.</b> ${hasFiles?`${saved.inv?'An item list':''}${saved.inv&&(saved.sales||[]).length?' and ':''}${(saved.sales||[]).length?`${saved.sales.length} sales file${saved.sales.length===1?'':'s'}`:''}`:'Settings and your order'}. Copy it to shared storage so your other computers see it too?</div><div class="row"><button class="btn small primary" id="migYes" type="button">Copy to shared storage</button><button class="btn small ghost" id="migNo" type="button">Not now</button></div>`;
+  $('#migNo').onclick=()=>{el.hidden=true;store.set('migrated',true)};
+  $('#migYes').onclick=async()=>{
+    el.innerHTML='<div>Copying to shared storage…</div>';
+    for(const [k,v] of Object.entries(local)){cloud.want[k]=v;await cloudPush(k)}
+    const items=[];
+    if(saved&&saved.inv){saved.inv.id=saved.inv.id||newId();items.push({x:{kind:'inv',fileName:saved.inv.fileName},out:saved.inv,named:{}})}
+    for(const f of (saved&&saved.sales)||[]){f.id=f.id||newId();items.push({x:{kind:'sales',fileName:f.fileName,from:f.from,to:f.to},out:f,named:{}})}
+    await cloudUpload(items);
+    store.set('migrated',true);el.hidden=true;
+    const j=await (await api('state')).json();cloud.maps=j.maps;useMaps(SYNCED);await loadManifest(j.manifest);resetQuick();recompute();
+    toast('Copied to shared storage');
+  };
+}
+async function cloudInit(){
+  // only the Cloudflare build (scripts/build.mjs) has a storage API to look for
+  if(!document.querySelector('meta[name="lrp-storage"]'))return false;
+  let j;
+  try{
+    const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),8000);
+    j=await (await api('state',{signal:ctl.signal})).json();clearTimeout(t);
+  }catch(e){
+    // 503 = Cloudflare site without Access/R2 set up yet; anything else = not the Cloudflare site
+    if(e.status===503||e.status===401)cloud.off=e.message;
+    syncStatus();return false;
+  }
+  cloud.on=true;cloud.user=j.user||'';cloud.maps=j.maps||{};cloud.last=Date.now();
+  useMaps(SYNCED.filter(k=>Object.keys(cloud.maps[k]||{}).length));
+  await loadManifest(j.manifest||{inventory:null,sales:[]});
+  $('#sampleBanner').innerHTML='<div><b>This is sample data for a made-up store.</b> Load your Advent inventory and sales exports below to replace it. They’re saved to your shared storage, so every computer you sign in on sees them.</div>';
+  setInterval(cloudPull,30000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)cloudPull()});
+  window.addEventListener('focus',cloudPull);
+  syncStatus();offerMigration();
+  return true;
+}
+const SAMPLE_V={'Valley Beer Distributors':{lead:2,cycle:7,min:300},'Coastal Wine Imports':{lead:5,cycle:14,min:500},'Crown Beverage Co.':{lead:3,cycle:7,min:250}};
+const SAMPLE_OV={};
+const vendorOf=v=>Object.assign({},VDEF,S.sample?SAMPLE_V[v]||{}:{},vendorCfg[v]||{});
+const getOv=k=>Object.assign({},S.sample?SAMPLE_OV[k]||{}:{},overrides[k]||{});
+
+const S={sample:true,inv:null,sales:[],pending:[],res:null,view:'reorder',q:'',vendor:'',cat:'',flag:'',limit:200,showAllFiles:false,
+  quick:{anchor:'',qty:'',countIn:'case',mixSizes:false,mixFlavors:false,disc:'',extra:[],manual:{},review:{},why:{},note:'',busy:null},
+  sort:{reorder:['urg',1],all:['name',1],dead:['tied',-1]}};
+
+/* ---------- small helpers ---------- */
+const DAY=864e5;
+function dayOf(y,m,d){if(m<1||m>12||d<1||d>31||y<1990||y>2100)return null;return Math.floor(Date.UTC(y,m-1,d)/DAY)}
+function dParts(day){const t=new Date(day*DAY);return {y:t.getUTCFullYear(),m:t.getUTCMonth()+1,d:t.getUTCDate(),dow:t.getUTCDay()}}
+const fmtDay=d=>d==null?'—':new Date(d*DAY).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',timeZone:'UTC'});
+const fmtDayShort=d=>new Date(d*DAY).toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
+const toIso=d=>new Date(d*DAY).toISOString().slice(0,10);
+const fromIso=s=>{const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);return m?dayOf(+m[1],+m[2],+m[3]):null};
+const int=n=>Math.round(n).toLocaleString('en-US');
+const dec1=n=>n>=100?int(n):n>=10?n.toFixed(0):n>=1?n.toFixed(1):n>0?n.toFixed(2):'0';
+const money=n=>'$'+Math.round(n).toLocaleString('en-US');
+const money2=n=>'$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+function num(v){
+  if(typeof v==='number')return isFinite(v)?v:NaN;
+  if(v==null)return NaN;
+  let s=String(v).trim();if(!s)return NaN;
+  const neg=/^\(.*\)$/.test(s)||/^-|-$/.test(s);
+  s=s.replace(/[^0-9.eE]/g,'');
+  const n=parseFloat(s);if(isNaN(n))return NaN;
+  return neg?-Math.abs(n):n;
+}
+function toDay(v){
+  if(v instanceof Date&&!isNaN(v))return dayOf(v.getFullYear(),v.getMonth()+1,v.getDate());
+  if(typeof v==='number'){if(v>20000&&v<80000)return Math.floor(v)-25569;return null}
+  const s=String(v??'').trim();if(!s)return null;let m;
+  if((m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/)))return dayOf(+m[1],+m[2],+m[3]);
+  if((m=s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/))){let y=+m[3];if(y<100)y+=2000;return dayOf(y,+m[1],+m[2])}
+  if((m=s.match(/^(\d{4})(\d{2})(\d{2})$/)))return dayOf(+m[1],+m[2],+m[3]);
+  const t=Date.parse(s);if(!isNaN(t)){const d=new Date(t);return dayOf(d.getFullYear(),d.getMonth()+1,d.getDate())}
+  return null;
+}
+function normCode(v){
+  if(v==null)return '';
+  let s=typeof v==='number'?String(Math.round(v)):String(v).trim();
+  s=s.replace(/^'/,'').replace(/\.0+$/,'').replace(/[^0-9a-zA-Z]/g,'').toUpperCase().replace(/^0+(?=.)/,'');
+  return s==='0'?'':s;
+}
+const normName=s=>String(s??'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+const normH=h=>String(h??'').toLowerCase().replace(/[^a-z0-9#]+/g,' ').replace(/#/g,' ').replace(/\s+/g,' ').trim();
+function zFor(p){
+  const a=[-39.69683028665376,220.9460984245205,-275.9285104469687,138.357751867269,-30.66479806614716,2.506628277459239],
+        b=[-54.47609879822406,161.5858368580409,-155.6989798598866,66.80131188771972,-13.28068155288572],
+        c=[-0.007784894002430293,-0.3223964580411365,-2.400758277161838,-2.549732539343734,4.374664141464968,2.938163982698783],
+        d=[0.007784695709041462,0.3224671290700398,2.445134137142996,3.754408661907416];
+  const pl=0.02425;let q,r;
+  if(p<pl){q=Math.sqrt(-2*Math.log(p));return(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)}
+  if(p<=1-pl){q=p-.5;r=q*q;return(((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1)}
+  q=Math.sqrt(-2*Math.log(1-p));return-(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);
+}
+function toast(msg){const t=document.createElement('div');t.className='toast';t.setAttribute('role','status');t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
+
+/* ---------- column detection ---------- */
+const INV_FIELDS=[
+  {k:'sku',label:'Item # / SKU'},{k:'upc',label:'UPC / barcode'},{k:'name',label:'Description'},{k:'size',label:'Size'},
+  {k:'category',label:'Department / category'},{k:'vendor',label:'Vendor / distributor'},{k:'onHand',label:'Quantity on hand',req:true},
+  {k:'onOrder',label:'On order'},{k:'cost',label:'Unit cost'},{k:'price',label:'Retail price'},{k:'pack',label:'Pack (single, 6pk…)'},{k:'casePack',label:'Units per case'}];
+const SALES_FIELDS=[
+  {k:'date',label:'Sale date'},{k:'sku',label:'Item # / SKU'},{k:'upc',label:'UPC / barcode'},{k:'name',label:'Description'},
+  {k:'size',label:'Size'},{k:'qty',label:'Quantity sold',req:true},{k:'amount',label:'Sales $'}];
+const SYN={
+  sku:['sku','item','item no','item number','itemnum','item num','item code','item id','itemid','plu','product code','product id','stock code','code','id'],
+  upc:['upc','mainupc','main upc','barcode','bar code','upc code','ean','upc ean','scan code','upc1'],
+  name:['description','item description','item name','itemname','desc','name','product','product name','product description','descr'],
+  size:['size','sizename','size name','bottle size','unit size','item size','volume','sz','ml'],
+  category:['department','depname','dept','dept name','department name','category','catname','class','type','sub department','dept id','deptid'],
+  vendor:['vendor','vendor name','vendorname','supplier','distributor','primary vendor','wholesaler','supplier name','vendor id','vendor number','vendor no','vendorid'],
+  onHand:['totalqty','total qty','qty on hand','quantity on hand','on hand','onhand','qoh','instoreqty','in stock','instock','on hand qty','current stock','stock','qty','quantity','available','inventory','in stock qty','units on hand'],
+  onOrder:['on order','qty on order','onorder','ordered','quantity on order'],
+  cost:['cost','currentcost','unit cost','unitcost','avg cost','avgcost','average cost','last cost','cost each','current cost'],
+  price:['price','priceperunit','price per unit','retail','retail price','sell price','unit price','regular price','price 1','price1'],
+  casePack:['case pack','units per case','case qty','case size','unit case','per case','pk','case','units case','case units','casepack'],
+  pack:['packname','pack name','pack','pack size','pack type'],
+  date:['date','sale date','sales date','trans date','transaction date','business date','invoice date','date sold','sold date','day'],
+  qty:['qtysold','qty sold','quantity sold','units sold','unitssold','sold qty','sales qty','total units','sold','qty','quantity','units','number sold','count'],
+  amount:['salesamount','net sales','sales','amount','sales amount','total','ext price','extended price','extended','net amount','total sales','gross sales','ext amount','revenue']};
+const ORDER={inv:['upc','sku','onHand','onOrder','casePack','pack','cost','price','vendor','category','size','name'],sales:['date','upc','sku','qty','amount','size','name']};
+
+/* ---------- case size estimate (Advent's item list has no case size) ---------- */
+const LIQ=/wine|champ|spark|vodka|whisk|bourbon|tequila|mezcal|rum|gin|liqueur|cordial|brandy|cognac|scotch|grain|spirit|sake|vermouth|^bar$|cocktail|rtd/i;
+const BEERISH=/beer|seltzer|rtd|cocktail|cider|malt/i;
+function parseSize(s){
+  s=String(s||'').toLowerCase();let m;
+  if((m=s.match(/(\d+(?:\.\d+)?)\s*(ml|l|lt|ltr|liter|litre|oz)\b/))){const v=+m[1];return m[2]==='oz'?{oz:v}:{ml:m[2]==='ml'?v:v*1000}}
+  if((m=s.match(/\b(50|100|187|200|355|375|500|720|750)\b/)))return {ml:+m[1]};
+  return null;
+}
+function parsePack(s){
+  s=String(s||'').toLowerCase();let m;
+  if(/\bsingle\b|tall can/.test(s))return 1;
+  if((m=s.match(/(\d+)\s*(?:pk|pck|pack|-pack|ct)\b/)))return +m[1];
+  if((m=s.match(/\b(\d+)\s*x\s*\d/)))return +m[1];
+  return null;
+}
+function estPack(it){
+  const dept=it.category||'',sz=parseSize(it.size)||parseSize(it.name),pk=parsePack(it.pack)||parsePack(it.name);
+  if(BEERISH.test(dept)&&!(sz&&sz.ml&&sz.ml>=500)&&(pk||(sz&&(sz.oz||sz.ml)))){
+    const p=pk||1;
+    if(p===1)return sz&&sz.oz&&sz.oz>=19?12:24;
+    return p>=18?1:Math.max(1,Math.round(24/p));
+  }
+  if(LIQ.test(dept)&&sz&&sz.ml){
+    const ml=sz.ml;
+    if(pk&&pk>1)return ml<=100?12:Math.max(1,Math.round(24/pk));
+    return ml<=60?120:ml<=100?60:ml<=200?48:ml<=375?24:ml<=1000?12:ml<=1800?6:4;
+  }
+  return 0;
+}
+function datesFromName(name){
+  const s=String(name||'');const found=[];let m;
+  const re=/(\d{4})[-_.](\d{1,2})[-_.](\d{1,2})|(\d{1,2})[-_.](\d{1,2})[-_.](\d{2,4})|(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)/g;
+  while((m=re.exec(s))){
+    let d=null;
+    if(m[1])d=dayOf(+m[1],+m[2],+m[3]);
+    else if(m[4]){let y=+m[6];if(y<100)y+=2000;d=dayOf(y,+m[4],+m[5])}
+    else d=dayOf(+m[7],+m[8],+m[9]);
+    if(d!=null)found.push(d);
+  }
+  // Advent names reports like Item_Sales_Report_2026-10-12_to_2026-10-19: its business day runs 5 AM to 5 AM,
+  // so the second date is the cut-off (4:59 AM) and the report covers the 12th through the 18th
+  if(found.length>=2){
+    const from=Math.min(found[0],found[1]),to=Math.max(found[0],found[1]);
+    if(/\d_to_\d/i.test(s)&&to>from)return {from,to:to-1,cut:true};
+    return {from,to};
+  }
+  if(found.length===1)return {from:found[0],to:found[0]};
+  const MON=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+  if((m=s.toLowerCase().match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s_\-.]*(20\d{2})\b/))||(m=s.match(/(?<!\d)(20\d{2})[-_](\d{2})(?![-_.]?\d)/))){
+    const y=m[2].length===4?+m[2]:+m[1],mo=m[2].length===4?MON.indexOf(m[1])+1:+m[2];
+    const from=dayOf(y,mo,1);if(from==null)return null;
+    return {from,to:(mo===12?dayOf(y+1,1,1):dayOf(y,mo+1,1))-1};
+  }
+  return null;
+}
+function autoMap(headers,kind){
+  const H=headers.map(normH),used=new Set(),map={};
+  for(const pass of [0,1])for(const f of ORDER[kind]){
+    if(map[f]!=null)continue;
+    for(const syn of SYN[f]){
+      const i=H.findIndex((h,ix)=>!used.has(ix)&&h&&(pass===0?h===syn:(syn.length>=3&&(' '+h+' ').includes(' '+syn+' '))));
+      if(i>=0){map[f]=i;used.add(i);break}
+    }
+  }
+  return map;
+}
+function detectHeader(rows,kind){
+  let best=0,bestScore=-1;
+  const all=ORDER[kind].flatMap(f=>SYN[f]);
+  for(let i=0;i<Math.min(30,rows.length);i++){
+    const r=rows[i]||[];let sc=0;
+    for(const c of r){const h=normH(c);if(h&&all.includes(h))sc++}
+    if(sc>bestScore){bestScore=sc;best=i}
+  }
+  return best;
+}
+const sigOf=headers=>headers.map(normH).join('|');
+
+/* ---------- reading files ---------- */
+async function readTable(file){
+  const ext=(file.name.split('.').pop()||'').toLowerCase();
+  if(ext==='pdf')throw new Error('PDF reports can’t be read here. In Advent, export the same report as CSV or Excel and load that file instead.');
+  if(['xls','xlsx','xlsm'].includes(ext)){
+    if(!window.XLSX)throw new Error('The Excel reader didn’t load. Save the report as CSV and try again.');
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
+    return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''});
+  }
+  if(!window.Papa)throw new Error('The CSV reader didn’t load. Check your internet connection and reload the page.');
+  const text=await file.text();
+  return Papa.parse(text,{skipEmptyLines:'greedy'}).data;
+}
+async function queueFiles(files,kind){
+  for(const file of files){
+    try{
+      const rows=await readTable(file);
+      if(!rows.length)throw new Error('The file is empty.');
+      const p={kind,fileName:file.name,rows,file};
+      setHeader(p,detectHeader(rows,kind));
+      S.pending.push(p);
+    }catch(e){toast(file.name+': '+e.message)}
+  }
+  renderMapper();
+}
+function setHeader(p,idx){
+  p.headerIdx=idx;
+  p.headers=(p.rows[idx]||[]).map((h,i)=>String(h??'').trim()||('Column '+(i+1)));
+  const saved=store.get('map.'+p.kind+'.'+sigOf(p.headers),null);
+  if(saved){p.map={};for(const [f,h] of Object.entries(saved)){const i=p.headers.indexOf(h);if(i>=0)p.map[f]=i}}
+  else p.map=autoMap(p.headers,p.kind);
+  if(p.kind==='sales'&&p.from==null){
+    const d=datesFromName(p.fileName);
+    p.from=d?d.from:null;p.to=d?d.to:null;p.endCut=!!(d&&d.cut);
+  }
+}
+
+function applyPending(p){
+  const g=(row,f)=>p.map[f]!=null?row[p.map[f]]:'';
+  const body=p.rows.slice(p.headerIdx+1);
+  const isTotal=s=>/^(grand\s*)?(sub)?\s*totals?\b|^report total/i.test(String(s||'').trim());
+  if(p.kind==='inv'){
+    if(p.map.onHand==null)throw new Error('Pick the column that holds quantity on hand.');
+    if(p.map.sku==null&&p.map.upc==null&&p.map.name==null)throw new Error('Pick at least one of Item #, UPC or Description so items can be matched to sales.');
+    const items=new Map();
+    for(const row of body){
+      const name=String(g(row,'name')??'').trim(),sku=String(g(row,'sku')??'').trim(),upc=String(g(row,'upc')??'').trim(),size=String(g(row,'size')??'').trim();
+      if(!name&&!sku&&!upc)continue;
+      if(isTotal(name)||isTotal(sku))continue;
+      const oh=num(g(row,'onHand'));
+      const key=normCode(sku)||normCode(upc)||('n:'+normName(name+' '+size));
+      const ex=items.get(key);
+      if(ex){ex.onHand+=isNaN(oh)?0:oh;continue}
+      items.set(key,{key,sku,upc,name:name||sku||upc,size,category:String(g(row,'category')??'').trim()||'Uncategorized',
+        vendor:String(g(row,'vendor')??'').trim(),pack:String(g(row,'pack')??'').trim(),onHand:isNaN(oh)?0:oh,onOrder:Math.max(0,num(g(row,'onOrder'))||0),
+        cost:Math.max(0,num(g(row,'cost'))||0),price:Math.max(0,num(g(row,'price'))||0),casePack:Math.max(0,Math.round(num(g(row,'casePack'))||0))});
+    }
+    if(!items.size)throw new Error('No item rows found under the header row. Check that the header row number is right.');
+    return {fileName:p.fileName,items:[...items.values()]};
+  }
+  if(p.map.qty==null)throw new Error('Pick the column that holds quantity sold.');
+  if(p.map.sku==null&&p.map.upc==null&&p.map.name==null)throw new Error('Pick at least one of Item #, UPC or Description so sales can be matched to items.');
+  const hasDate=p.map.date!=null;
+  if(!hasDate&&(p.from==null||p.to==null||p.to<p.from))throw new Error('This file has no date column. Enter the first and last day the report covers.');
+  const rows=[];let bad=0,lo=Infinity,hi=-Infinity;
+  for(const row of body){
+    const name=String(g(row,'name')??'').trim(),skuRaw=g(row,'sku'),upcRaw=g(row,'upc');
+    if(!name&&!String(skuRaw??'').trim()&&!String(upcRaw??'').trim())continue;
+    if(isTotal(name)||isTotal(skuRaw))continue;
+    const q=num(g(row,'qty'));if(isNaN(q)){bad++;continue}
+    let day,dayEnd;
+    if(hasDate){day=toDay(g(row,'date'));if(day==null){bad++;continue}}
+    else{day=p.from;dayEnd=p.to}
+    const size=String(g(row,'size')??'').trim();
+    const amt=num(g(row,'amount'));
+    rows.push({sku:normCode(skuRaw),upc:normCode(upcRaw),nm:normName(name),nms:normName(name+' '+size),label:name||String(skuRaw||upcRaw),day,dayEnd,qty:q,amt:isNaN(amt)?null:amt});
+    if(day<lo)lo=day;const e=dayEnd??day;if(e>hi)hi=e;
+  }
+  if(!rows.length)throw new Error('No sales rows could be read. Check the header row and the date and quantity columns.');
+  return {fileName:p.fileName,rows,from:lo,to:hi,bad};
+}
+
+/* ---------- sample store ---------- */
+function makeSample(){
+  let seed=20261022;
+  const rnd=()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+  const gauss=()=>{let u=0;while(!u)u=rnd();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*rnd())};
+  const pois=l=>{if(l<=0)return 0;if(l>25)return Math.max(0,Math.round(l+Math.sqrt(l)*gauss()));const L=Math.exp(-l);let k=0,p=1;do{k++;p*=rnd()}while(p>L);return k-1};
+  const now=new Date();const T=dayOf(now.getFullYear(),now.getMonth()+1,now.getDate());const D0=T-730;
+  const V=['Metro Spirits Distributing','Crown Beverage Co.','Valley Beer Distributors','Coastal Wine Imports'];
+  // name, size, dept, vendor, cost, price, units/case, base units/day, pattern, extras
+  const P=[
+    ["Tito's Handmade Vodka",'1.75L','Vodka',0,26.5,34.99,6,3.0,'',{so:[100,88],oh:11}],
+    ["Tito's Handmade Vodka",'750ml','Vodka',0,15.5,21.99,12,2.3,'',{}],
+    ["Tito's Handmade Vodka",'50ml','Vodka',0,.85,1.79,120,7,'',{}],
+    ['Smirnoff No. 21 Vodka','1.75L','Vodka',1,18,24.99,6,1.5,'',{}],
+    ['Grey Goose Vodka','750ml','Vodka',1,25,34.99,12,.55,'fancy',{oh:62}],
+    ["Jack Daniel's Old No. 7",'750ml','Whiskey',0,19,26.99,12,1.5,'',{oh:8}],
+    ["Jack Daniel's Old No. 7",'1.75L','Whiskey',0,38,49.99,6,.9,'',{oh:-2}],
+    ['Jameson Irish Whiskey','750ml','Whiskey',1,21,29.99,12,1.1,'irish',{}],
+    ['Crown Royal','750ml','Whiskey',1,22,29.99,12,1.1,'fancy',{}],
+    ['Crown Royal','50ml','Whiskey',1,1.1,2.29,120,5,'',{}],
+    ['Fireball Cinnamon Whisky','50ml','Liqueur',0,.7,1.49,120,16,'',{oh:85}],
+    ['Fireball Cinnamon Whisky','750ml','Liqueur',0,11,16.99,12,.8,'',{}],
+    ['Buffalo Trace Bourbon','750ml','Whiskey',1,22,29.99,12,.5,'fancy',{}],
+    ["Blanton's Single Barrel",'750ml','Whiskey',1,55,79.99,6,.08,'',{oh:1,hold:true}],
+    ["Maker's Mark Bourbon",'750ml','Whiskey',0,22,29.99,12,.7,'fancy',{oh:5}],
+    ['Bacardi Superior Rum','1.75L','Rum',1,17,22.99,6,.9,'summer',{}],
+    ['Captain Morgan Spiced Rum','750ml','Rum',0,13,18.99,12,.8,'',{}],
+    ['Casamigos Blanco Tequila','750ml','Tequila',1,38,52.99,6,.5,'',{so:[44,26],oh:2}],
+    ['Patrón Silver Tequila','750ml','Tequila',1,34,44.99,6,.45,'',{}],
+    ['Don Julio 1942 Añejo','750ml','Tequila',1,120,169.99,6,.07,'fancy',{oh:9}],
+    ['Espolòn Blanco Tequila','750ml','Tequila',0,19,26.99,12,.7,'summer',{}],
+    ['Hennessy VS Cognac','750ml','Brandy',0,32,42.99,12,.6,'fancy',{}],
+    ['Tanqueray London Dry Gin','750ml','Gin',1,18,24.99,12,.35,'summer',{}],
+    ['Kahlúa Coffee Liqueur','750ml','Liqueur',0,17,22.99,12,.25,'cream',{}],
+    ['Baileys Irish Cream','750ml','Liqueur',1,22,28.99,12,.4,'cream',{oh:7}],
+    ['Dr. McGillicuddy’s Peppermint Schnapps','750ml','Liqueur',0,9,13.99,12,.15,'winter',{oh:30}],
+    ['Aperol Aperitivo','750ml','Liqueur',1,21,27.99,12,.3,'summer',{}],
+    ['Midori Melon Liqueur','750ml','Liqueur',0,16,22.99,12,.12,'',{dead:210,oh:14}],
+    ['Chambord Raspberry Liqueur','375ml','Liqueur',1,14,19.99,12,.02,'',{dead:150,oh:9}],
+    ['Modelo Especial 12pk Cans','12pk','Beer',2,13.5,18.99,2,4.2,'beer',{oh:0,so:[4,0]}],
+    ['Bud Light 24pk Cans','24pk','Beer',2,19,25.99,1,2.8,'beer',{}],
+    ['Michelob Ultra 12pk Cans','12pk','Beer',2,13,17.99,2,3.1,'beer',{oh:9}],
+    ['Corona Extra 12pk Bottles','12pk','Beer',2,14,19.99,2,2.4,'beer',{}],
+    ['Coors Light 30pk Cans','30pk','Beer',2,21,27.99,1,1.6,'beer',{}],
+    ['Guinness Draught 8pk Cans','8pk','Beer',2,10.5,14.99,3,.55,'irish',{}],
+    ['White Claw Variety 12pk','12pk','Seltzer',2,15,20.99,2,2.6,'summer',{}],
+    ['High Noon Variety 8pk','8pk','Seltzer',2,17,23.99,3,1.7,'summer',{}],
+    ['High Noon Pineapple 4pk','4pk','Seltzer',2,9,12.99,6,1.4,'',{newd:19,oh:3}],
+    ['Josh Cellars Cabernet Sauvignon','750ml','Wine',3,10,14.99,12,1.4,'',{}],
+    ['La Marca Prosecco','750ml','Sparkling',3,10.5,15.99,12,1.1,'sparkle',{oh:14}],
+    ['Veuve Clicquot Brut','750ml','Sparkling',3,45,64.99,6,.22,'sparkle',{}],
+    ['Kim Crawford Sauvignon Blanc','750ml','Wine',3,11,16.99,12,1.0,'summer',{}],
+    ['Meiomi Pinot Noir','750ml','Wine',3,15,21.99,12,.8,'',{}],
+    ['Barefoot Moscato','1.5L','Wine',3,7,11.99,6,.9,'',{}],
+    ['Whispering Angel Rosé','750ml','Wine',3,16,22.99,12,.55,'summer',{oh:36}],
+    ['Apothic Red Blend','750ml','Wine',3,7,11.99,12,.5,'',{}],
+    ['Franzia Chillable Red Box','5L','Wine',3,15,21.99,4,.4,'',{}]];
+  const MONTH=[.86,.9,.95,.95,1.04,1.05,1.1,1.0,.94,.98,1.14,1.42];
+  const DOW=[.72,.74,.8,.9,1.0,1.45,1.39];
+  const nth=(y,m,dow,k)=>{const f=dayOf(y,m,1);const fd=dParts(f).dow;return f+((dow-fd+7)%7)+7*(k-1)};
+  const hol={};
+  const holFor=y=>hol[y]||(hol[y]={tg:nth(y,11,4,4),sb:nth(y,2,0,2)});
+  function factor(tag,day){
+    const {y,m,d,dow}=dParts(day),h=holFor(y);
+    let f=MONTH[m-1]*DOW[dow];
+    if(day===h.tg-1)f*=2.3;else if(day>=h.tg-6&&day<h.tg)f*=1.25;else if(day===h.tg)f*=.35;
+    if(m===12&&d>=18&&d<=24)f*=1.45;if(m===12&&d===25)f*=.05;if(m===12&&d>=26&&d<=30)f*=1.25;if(m===12&&d===31)f*=2.1;if(m===1&&d===1)f*=.3;
+    if(tag==='beer'){if(m>=5&&m<=8)f*=1.3;if(m===12||m<=2)f*=.82;if(m===7&&d>=2&&d<=4)f*=2;if(day===h.sb||day===h.sb-1)f*=1.9}
+    if(tag==='summer'){if(m>=5&&m<=8)f*=1.4;else if(m>=11||m<=2)f*=.7;if(m===7&&d>=2&&d<=4)f*=1.6}
+    if(tag==='irish'&&m===3&&d>=13&&d<=17)f*=3.4;
+    if(tag==='cream'){f*=m===11?1.7:m===12?2.4:.65}
+    if(tag==='winter'){f*=(m>=11||m<=2)?2:.4}
+    if(tag==='sparkle'){if(m===12&&d>=27)f*=5.5;if(m===2&&d>=10&&d<=14)f*=1.8;if(m===12)f*=1.3}
+    if(tag==='fancy'&&m===12)f*=1.6;
+    return f;
+  }
+  const items=[],rows=[];
+  P.forEach((p,i)=>{
+    const [name,size,cat,v,cost,price,pack,rate,tag,x]=p;
+    const sku=String(100100+i*37);
+    const upc='0'+String(80000000000+Math.floor(rnd()*9999999999)).slice(0,11);
+    let walk=1;let last30=0;
+    for(let day=D0;day<T;day++){
+      walk=Math.min(1.25,Math.max(.8,walk+gauss()*.01));
+      const back=T-day;
+      if(x.so&&back<=x.so[0]&&back>x.so[1])continue;
+      if(x.dead&&back<=x.dead)continue;
+      if(x.newd&&back>x.newd)continue;
+      const growth=1+(day-D0)/730*.08;
+      const q=pois(rate*factor(tag,day)*walk*growth);
+      if(q>0){rows.push({sku,upc:'',nm:'',nms:'',label:name,day,qty:q,amt:q*price});if(back<=30)last30+=q}
+    }
+    const oh=x.oh!=null?x.oh:Math.round(Math.max(1,last30)/30*(9+rnd()*42));
+    if(x.hold)SAMPLE_OV[sku]={noReorder:true};
+    items.push({key:sku,sku,upc,name,size,category:cat,vendor:V[v],onHand:oh,onOrder:0,cost,price,casePack:pack});
+  });
+  const keyOf=(n,s)=>items.find(x=>x.name===n&&x.size===s).key;
+  SAMPLE_DEALS=[
+    {id:'s1',name:"Tito's mix-and-match sizes",vendor:V[0],anchor:keyOf("Tito's Handmade Vodka",'750ml'),mixSizes:true,mixFlavors:false,
+     keys:[keyOf("Tito's Handmade Vodka",'1.75L'),keyOf("Tito's Handmade Vodka",'750ml'),keyOf("Tito's Handmade Vodka",'50ml')],
+     countIn:'case',tiers:[{min:5,amt:10,type:'case'},{min:10,amt:18,type:'case'},{min:25,amt:24,type:'case'}],maxDays:60,from:'',to:'',use:true},
+    {id:'s2',name:'La Marca Prosecco holiday QD',vendor:V[3],anchor:keyOf('La Marca Prosecco','750ml'),mixSizes:false,mixFlavors:false,
+     keys:[keyOf('La Marca Prosecco','750ml')],countIn:'case',tiers:[{min:5,amt:12,type:'case'},{min:10,amt:20,type:'case'}],maxDays:90,from:'',to:'',use:true}];
+  return {inv:{fileName:'Sample inventory',items},sales:[{fileName:'Sample sales, 2 years',rows,from:D0,to:T-1}]};
+}
+
+/* ---------- forecasting ---------- */
+// Summarise the loaded sales once: one number per item per day. Reused until files, the item list or
+// excluded departments change, so ordering clicks and setting changes don't re-read every sales row.
+function buildAgg(){
+  const inv=S.inv.items;
+  const skipD=new Set(inv.map(i=>i.category).filter(d=>deptOf(d).skip));
+  const bySku=new Map(),byUpc=new Map(),byName=new Map(),byNm=new Map();
+  for(const it of inv){
+    const s=normCode(it.sku),u=normCode(it.upc),n1=normName(it.name+' '+it.size),n0=normName(it.name);
+    if(s&&!bySku.has(s))bySku.set(s,it);if(u&&!byUpc.has(u))byUpc.set(u,it);
+    if(n1&&!byName.has(n1))byName.set(n1,it);if(n0&&!byNm.has(n0))byNm.set(n0,it);
+  }
+  let maxDay=-Infinity,minDay=Infinity,totalRows=0;
+  for(const f of S.sales)for(const r of f.rows){const e=r.dayEnd??r.day;if(e>maxDay)maxDay=e;if(r.day<minDay)minDay=r.day}
+  const hasSales=isFinite(maxDay);
+  if(!hasSales){const n=new Date();maxDay=dayOf(n.getFullYear(),n.getMonth()+1,n.getDate())-1;minDay=maxDay+1}
+  const T=maxDay+1,N=Math.max(0,T-minDay);
+  const stat=new Map(),unmatched=new Map();let matched=0;
+  for(const f of S.sales)for(const r of f.rows){
+    totalRows++;
+    const it=(r.sku&&(bySku.get(r.sku)||byUpc.get(r.sku)))||(r.upc&&(byUpc.get(r.upc)||bySku.get(r.upc)))||(r.nms&&byName.get(r.nms))||(r.nm&&(byNm.get(r.nm)||byName.get(r.nm)));
+    if(!it){const k=r.label||'(blank)';unmatched.set(k,(unmatched.get(k)||0)+r.qty);continue}
+    matched++;
+    if(skipD.has(it.category))continue;
+    let st=stat.get(it.key);
+    if(!st){st={sArr:new Float32Array(N),rev:0,firstSale:null,lastSale:null,spread:false};stat.set(it.key,st)}
+    const e=r.dayEnd??r.day;
+    if(r.dayEnd!=null&&r.dayEnd>r.day){const len=r.dayEnd-r.day+1,q=r.qty/len;for(let d=r.day;d<=r.dayEnd;d++)st.sArr[d-minDay]+=q;st.spread=true}
+    else st.sArr[r.day-minDay]+=r.qty;
+    if(r.qty>0){if(st.firstSale==null||r.day<st.firstSale)st.firstSale=r.day;if(st.lastSale==null||e>st.lastSale)st.lastSale=e}
+    if(e>=T-365)st.rev+=(r.amt!=null?r.amt:r.qty*(it.price||0));
+  }
+  // department daily totals, used for the seasonal factor
+  const cat=new Map(inv.map(i=>[i.key,i.category])),catArr=new Map(),tot=new Float64Array(N);
+  for(const [k,st] of stat){
+    const c=cat.get(k);let a=catArr.get(c);if(!a){a=new Float64Array(N);catArr.set(c,a)}
+    for(let i=0;i<N;i++){const q=st.sArr[i];if(q){a[i]+=q;tot[i]+=q}}
+  }
+  return {inv:S.inv,sales:S.sales.slice(),skipSig:[...skipD].sort().join('|'),T,N,minDay,hasSales,stat,unmatched,matched,totalRows,catArr,tot};
+}
+function compute(){
+  if(!S.inv){S.res=null;return}
+  const skipSig=[...new Set(S.inv.items.map(i=>i.category).filter(d=>deptOf(d).skip))].sort().join('|');
+  let A=S.agg;
+  if(!A||A.inv!==S.inv||A.skipSig!==skipSig||A.sales.length!==S.sales.length||A.sales.some((f,i)=>f!==S.sales[i]))A=S.agg=buildAgg();
+  const {T,N,minDay,hasSales,catArr,tot,unmatched,matched,totalRows}=A;
+  const items=S.inv.items.map(it=>{
+    const ov=overrides[it.key]||{},dc=deptOf(it.category),st=A.stat.get(it.key);
+    return Object.assign({},it,{vendor:ov.vendor||it.vendor||dc.vendor||NO_DIST,skip:dc.skip,sArr:st?st.sArr:null,rev:st?st.rev:0,firstSale:st?st.firstSale:null,lastSale:st?st.lastSale:null,spread:st?st.spread:false});
+  });
+  const seasonOK=settings.useSeason&&N>=365+91;
+  const sum=(arr,a,b)=>{let s=0;for(let i=Math.max(0,a);i<Math.min(arr.length,b);i++)s+=arr[i];return s};
+  const cache=new Map();
+  function season(cat,off,H){
+    if(!seasonOK)return 1;
+    const key=cat+'|'+off+'|'+H;if(cache.has(key))return cache.get(key);
+    let arr=catArr.get(cat)||tot;const a0=N-365;
+    if(sum(arr,a0-91,a0)<60)arr=tot;
+    const b=.6*sum(arr,a0-28,a0)/28+.4*sum(arr,a0-91,a0)/91;
+    const fwd=sum(arr,a0+off,a0+off+H)/H;
+    const f=b>0?Math.min(2.5,Math.max(.5,fwd/b)):1;
+    cache.set(key,f);return f;
+  }
+  const ctx={T,minDay,N,seasonOK,season,hasSales};
+  // ABC by last-365-day sales dollars
+  const live=items.filter(i=>!i.skip);
+  const ranked=live.filter(i=>i.rev>0).sort((a,b)=>b.rev-a.rev);
+  const totRev=ranked.reduce((s,i)=>s+i.rev,0);let cum=0;
+  for(const it of live)it.cls='C';
+  for(const it of ranked){it.cls=cum/totRev<.8?'A':cum/totRev<.95?'B':'C';cum+=it.rev}
+  const results=live.map(it=>forecastItem(it,ctx));
+  // files whose dates overlap would count the same sales twice
+  const overlaps=new Set();
+  S.sales.forEach((a,i)=>S.sales.forEach((b,j)=>{if(i<j&&a.from<=b.to&&b.from<=a.to){overlaps.add(i);overlaps.add(j)}}));
+  const allDepts=new Map();for(const it of items)allDepts.set(it.category,(allDepts.get(it.category)||0)+1);
+  S.res={ctx,results,byKey:new Map(results.map(r=>[r.key,r])),unmatched,matched,totalRows,hasSales,overlaps,allDepts};
+  applyDeals();
+}
+
+/* ---------- quantity deals ---------- */
+const todayDay=()=>{const n=new Date();return dayOf(n.getFullYear(),n.getMonth()+1,n.getDate())};
+function dealStatus(d){
+  const t=todayDay(),f=fromIso(d.from),e=fromIso(d.to);
+  if(e!=null&&t>e)return 'expired';
+  if(f!=null&&t<f)return 'upcoming';
+  return 'active';
+}
+// product family helpers: names are matched loosely because POS names are typed by hand
+function baseName(name){
+  let s=String(name||'').toLowerCase().replace(/['’`]/g,'').replace(/whisky/g,'whiskey');
+  s=s.replace(/\d+(?:\.\d+)?\s*(?:ml|l|lt|ltr|liter|litre|oz)\b/g,' ').replace(/\b\d+\s*(?:pk|pck|pack|pkts?|ct)\b/g,' ').replace(/\b(?:50|100|200|375|750|1000|1750|1\.75|1\.5)\b/g,' ');
+  s=s.replace(/\b(?:vodka|whiskey|tequila|rum|gin|cognac|brandy|liqueur|bourbon|cans?|bottles?|btls?|glass|single|sleeve|tall|pet|plastic|fl|cogn|pf)\b/g,' ');
+  return s.replace(/[^a-z0-9]+/g,' ').trim();
+}
+const brandOf=name=>{const t=baseName(name).split(' ').filter(w=>w!=='the');return t[0]||''};
+function sizeKey(it){const s=parseSize(it.size)||parseSize(it.name);const p=parsePack(it.pack)||parsePack(it.name)||1;return (s?(s.ml?Math.round(s.ml)+'ml':s.oz+'oz'):'?')+'x'+p}
+// the brand's items in the deal item's department, each with its product (flavour/expression) and size
+function famInfo(anchorKey){
+  const a=S.res&&S.res.byKey.get(anchorKey);if(!a)return null;
+  const abr=brandOf(a.it.name),dept=a.it.category;
+  return {a,ab:baseName(a.it.name),as:sizeKey(a.it),fam:S.res.results.filter(r=>r.it.category===dept&&brandOf(r.it.name)===abr)};
+}
+// sizeSel / flavSel: null mixes every size / flavour; a list mixes only those
+function suggestFamily(anchorKey,mixSizes,mixFlavors,sizeSel,flavSel){
+  const f=famInfo(anchorKey);if(!f)return [];
+  if(!mixSizes&&!mixFlavors)return [f.a.key];
+  const prodOK=r=>{const b=baseName(r.it.name);return b===f.ab||(mixFlavors&&(!flavSel||flavSel.includes(b)))};
+  const sizeOK=r=>{const k=sizeKey(r.it);return k===f.as||(mixSizes&&(!sizeSel||sizeSel.includes(k)))};
+  return f.fam.filter(r=>r===f.a||(prodOK(r)&&sizeOK(r))).map(r=>r.key);
+}
+function sizeLabel(k){
+  const [sz,p]=k.split('x');let l='Size not set';
+  if(sz.endsWith('ml')){const ml=+sz.slice(0,-2);l=ml>=1000?(ml/1000)+'L':ml+'ml'}else if(sz.endsWith('oz'))l=sz;
+  return +p>1?`${l} ${p}pk`:l;
+}
+const sizeRank=k=>{const m=k.match(/^([\d.]+)(ml|oz)x(\d+)/);return m?(m[2]==='oz'?+m[1]*29.6:+m[1])*1000+(+m[3]):1e12};
+// what the two dropdowns offer for the current deal item
+function mixOptions(q){
+  const f=famInfo(q.anchor);if(!f)return {sizes:[],flavs:[]};
+  const flavOn=b=>b===f.ab||(q.mixFlavors&&(!q.flavSel||q.flavSel.includes(b)));
+  const sz=new Map(),fl=new Map();
+  for(const r of f.fam){
+    const b=baseName(r.it.name),k=sizeKey(r.it);
+    if(b!==f.ab){const e=fl.get(b)||{k:b,label:r.it.name,n:0};e.n++;if(r.it.name.length<e.label.length)e.label=r.it.name;fl.set(b,e)}
+    if(flavOn(b)){const e=sz.get(k)||{k,label:sizeLabel(k),n:0,mine:k===f.as};e.n++;sz.set(k,e)}
+  }
+  return {sizes:[...sz.values()].sort((a,b)=>sizeRank(a.k)-sizeRank(b.k)),flavs:[...fl.values()].sort((a,b)=>a.label.localeCompare(b.label)),anchorSize:sizeLabel(f.as),anchorName:f.a.it.name};
+}
+// Fill up to a tier by adding one order step at a time to the item that would run out first,
+// then weigh the discount against the cost of carrying the extra stock.
+function dealRows(keys){
+  const res=S.res;
+  return keys.map(k=>res.byKey.get(k)).filter(r=>r&&!r.held).map(r=>{
+    const base=r.baseUnits??r.units;
+    return {r,base,step:r.byCase?r.pack:1,rate:r.base*r.s30,cost:r.it.cost,pos:r.position};
+  });
+}
+// Start from the normal order and add one order step at a time to the item that would run out first.
+function fillRows(rows,min,countIn,maxDays){
+  const cnt=(row,u)=>countIn==='case'?u/row.r.pack:u;
+  const units=rows.map(x=>x.base);
+  let total=rows.reduce((s,x,i)=>s+cnt(x,units[i]),0),overCap=false,guard=0;
+  const sellers=rows.some(x=>x.rate>0&&!x.locked);
+  // never stock up on items that aren't selling just to reach a quantity
+  if(!sellers&&total<min-1e-9)overCap=true;
+  while(sellers&&total<min-1e-9&&guard++<20000){
+    let pick=-1,best=Infinity,pickAny=-1,bestAny=Infinity;
+    rows.forEach((x,i)=>{
+      if(x.rate<=0||x.locked)return;   // quantities the owner typed are never changed
+      const cover=(x.pos+units[i])/x.rate,after=(x.pos+units[i]+x.step)/x.rate;
+      if(cover<bestAny){bestAny=cover;pickAny=i}
+      if(after<=maxDays&&cover<best){best=cover;pick=i}
+    });
+    if(pick<0){pick=pickAny;overCap=true}
+    if(pick<0)break;
+    units[pick]+=rows[pick].step;total+=cnt(rows[pick],rows[pick].step);
+  }
+  return {units,total,overCap};
+}
+const holdingCost=(x,extra)=>{
+  if(extra<=0)return 0;
+  const t0=x.rate>0?(x.pos+x.base)/x.rate+extra/(2*x.rate):365;
+  return x.cost*extra*((+settings.holdRate||0)/100)*Math.min(t0,730)/365;
+};
+function planDeal(d){
+  const res=S.res;if(!res)return null;
+  const rows=dealRows(d.keys);
+  if(!rows.length)return null;
+  const maxDays=+d.maxDays||90;
+  const disc=(t,row,u)=>t.type==='case'?t.amt*u/row.r.pack:t.type==='unit'?t.amt*u:(t.amt/100)*row.cost*u;
+  const tiers=[{min:0,amt:0,type:'case',none:true},...(d.tiers||[]).filter(t=>+t.min>0&&+t.amt>0).map(t=>({min:+t.min,amt:+t.amt||0,type:t.type||'case'})).sort((a,b)=>a.min-b.min)];
+  const out=tiers.map(t=>{
+    const {units,total,overCap}=fillRows(rows,t.min,d.countIn,maxDays);
+    let save=0,holdCost=0,extraCash=0,spend=0,maxCover=0;
+    const lines=rows.map((x,i)=>{
+      const u=units[i],e=u-x.base;
+      save+=t.none?0:disc(t,x,u);spend+=u*x.cost;extraCash+=e*x.cost;
+      holdCost+=holdingCost(x,e);
+      const cover=x.rate>0?(x.pos+u)/x.rate:(u>0?Infinity:0);
+      if(u>0&&cover>maxCover)maxCover=cover;
+      return {x,units:u,extra:e,cover};
+    });
+    return {t,lines,total,save,holdCost,net:save-holdCost,extraCash,spend,maxCover,overCap};
+  });
+  const ok=out.filter(o=>!o.t.none&&!o.overCap&&o.net>0);
+  const best=ok.length?ok.reduce((a,b)=>b.net>a.net?b:a):out[0];
+  const noCost=rows.filter(x=>!x.cost).length,noSales=!rows.some(x=>x.rate>0);
+  return {d,rows,out,best,noCost,noSales};
+}
+function applyDeals(){
+  const res=S.res;if(!res)return;
+  res.plans=new Map();res.dealSave=0;
+  for(const r of res.results){
+    if(!r.base0)r.base0={units:r.units,cases:r.cases,cost:r.cost,urg:r.urg,flags:r.flags.slice()};
+    else Object.assign(r,{units:r.base0.units,cases:r.base0.cases,cost:r.base0.cost,urg:r.base0.urg,flags:r.base0.flags.slice()});
+    r.baseUnits=r.units;r.ord=0;r.qdId=undefined;r.dealId=undefined;
+  }
+  // an item can only follow one deal; a later deal that shares items with an applied one is held back
+  const claimed=new Map();
+  // QD checks added to the order come first: they are what the owner chose to buy
+  res.qdPlans=new Map();
+  for(const o of qdList()){
+    // the quantities the owner entered are used exactly as entered
+    const items=(o.items||[]).map(i=>({r:res.byKey.get(i.key),units:Math.max(0,+i.units||0)})).filter(i=>i.r&&i.units>0);
+    const plan={o,items,total:0};res.qdPlans.set(o.id,plan);
+    plan.total=items.reduce((s,i)=>s+(o.countIn==='case'?i.units/i.r.pack:i.units),0);
+    if(!items.length)continue;
+    const clash=[...new Set(items.filter(i=>claimed.has(i.r.key)).map(i=>claimed.get(i.r.key)))];
+    if(clash.length){plan.blockedBy=clash;continue}
+    plan.applied=true;
+    for(const {r,units} of items){
+      claimed.set(r.key,o.name);
+      r.dealId=o.id;r.qdId=o.id;r.ord=units;
+      if(!r.flags.includes('qd'))r.flags.push('qd');
+    }
+    if(+o.disc>0)res.dealSave+=+o.disc*plan.total;
+  }
+  for(const d of dealsList()){
+    const p=planDeal(d);if(!p)continue;
+    res.plans.set(d.id,p);
+    if(!d.use||dealStatus(d)!=='active'||p.best.t.none)continue;
+    const clash=[...new Set(p.rows.filter(x=>claimed.has(x.r.key)).map(x=>claimed.get(x.r.key)))];
+    if(clash.length){p.blockedBy=clash;continue}
+    p.applied=true;
+    for(const x of p.rows)claimed.set(x.r.key,d.name);
+    for(const l of p.best.lines){
+      const r=l.x.r;
+      r.dealId=d.id;r.units=l.units;r.cases=r.byCase?Math.round(l.units/r.pack):0;r.cost=l.units*r.it.cost;
+      if(!r.flags.includes('qd'))r.flags.push('qd');
+      if(r.units>0&&r.urg===3)r.urg=2;
+    }
+  }
+  // what you've added to the order
+  for(const [k,u] of Object.entries(cartObj())){const r=res.byKey.get(k);if(r&&!r.qdId)r.ord=Math.max(0,+u||0)}
+  for(const r of res.results){
+    r.ord=r.ord||0;r.ordCases=r.byCase?Math.round(r.ord/r.pack):0;r.ordCost=r.ord*r.it.cost;
+    if(r.ord>0&&!r.flags.includes('onorder'))r.flags.push('onorder');
+  }
+}
+
+function forecastItem(it,ctx){
+  const ov=getOv(it.key),vc=vendorOf(it.vendor),{T}=ctx;
+  let start=ctx.minDay;
+  if(it.firstSale!=null&&it.firstSale-ctx.minDay>14)start=it.firstSale;
+  const n=Math.max(0,T-start);
+  const arr=new Float64Array(n),exc=new Uint8Array(n);
+  if(it.sArr){const off=start-ctx.minDay;for(let i=0;i<n;i++)arr[i]=it.sArr[off+i]||0}
+  // find stretches with no sales that are too long to be chance: treat them as out-of-stock days
+  const ranges=[];
+  if(!it.spread&&n>=14){
+    let sd=0;for(let i=0;i<n;i++)if(arr[i]>0)sd++;
+    const p=sd/n;
+    if(p>0){
+      let i=0;
+      while(i<n){
+        if(arr[i]>0){i++;continue}
+        let j=i;while(j<n&&arr[j]<=0)j++;
+        const L=j-i,trailing=j===n;
+        // chance of a dry spell this long anywhere in the history must be under 5%
+        if(i>0&&((trailing&&it.onHand<=0)||(!trailing&&L>=7&&Math.pow(1-p,L)*n<.05))){for(let k=i;k<j;k++)exc[k]=1;ranges.push([start+i,start+j-1])}
+        i=j;
+      }
+    }
+  }
+  const excDays=ranges.reduce((s,r)=>s+r[1]-r[0]+1,0);
+  const win=W=>{let s=0,c=0;for(let i=Math.max(0,n-W);i<n;i++)if(!exc[i]){s+=arr[i];c++}return c>=Math.min(7,W)?{r:s/c,c}:null};
+  const w28=win(28),w91=win(91),w365=win(365);
+  const blend=parts=>{let s=0,w=0;for(const [x,wt] of parts)if(x){s+=x.r*wt;w+=wt}return w?s/w:null};
+  const seasonal=ctx.seasonOK;
+  let raw=seasonal?blend([[w28,.6],[w91,.4]]):blend([[w28,.5],[w91,.3],[w365,.2]]);
+  if(raw==null)raw=w365?w365.r:0;
+  const adj=+ov.adj||0;
+  const base=Math.max(0,raw*(1+adj/100));
+  const Sf=(off,H)=>seasonal?ctx.season(it.category,off,H):1;
+  const s30=Sf(0,30),s60=Sf(0,60),s90=Sf(0,90);
+  // week-to-week variability over the last 26 clean weeks
+  const wk=[];
+  for(let w=0;w<26;w++){const b=n-7*w,a=b-7;if(a<0)break;let s=0,bad=false;for(let i=a;i<b;i++){if(exc[i]){bad=true;break}s+=arr[i]}if(!bad)wk.push(s)}
+  let sigmaD;
+  if(wk.length>=6){const m=wk.reduce((x,y)=>x+y,0)/wk.length;sigmaD=Math.sqrt(wk.reduce((x,y)=>x+(y-m)**2,0)/(wk.length-1))/Math.sqrt(7)}
+  else sigmaD=Math.sqrt(Math.max(base,.02))*1.2;
+  if(it.spread)sigmaD=Math.max(sigmaD,Math.sqrt(Math.max(base,.02)));
+  const svc=it.cls==='A'?settings.svcA:it.cls==='B'?settings.svcB:settings.svcC;
+  const z=zFor(Math.min(99.9,Math.max(50,+svc||95))/100);
+  const L=Math.max(0,+vc.lead||0),R=Math.max(0,+vc.cycle||0),P=Math.max(1,L+R);
+  const sP=Sf(0,Math.max(P,14)),sL=Sf(0,Math.max(L,14));
+  const demandP=base*sP*P,demandL=base*sL*L;
+  const ss=base>0?z*sigmaD*Math.sqrt(P):0;
+  const target=demandP+ss;
+  const onHand=it.onHand;
+  const onOrder=(ov.onOrder!=null&&ov.onOrder!=='')?Math.max(0,+ov.onOrder):(it.onOrder||0);
+  const position=Math.max(0,onHand)+onOrder;
+  const need=target-position;
+  let pack,packSrc;
+  if(+ov.pack>0){pack=Math.round(+ov.pack);packSrc='you'}
+  else if(it.casePack>0){pack=it.casePack;packSrc='file'}
+  else{const e=settings.estPack?estPack(it):0;if(e>0){pack=e;packSrc='est'}else{pack=Math.max(1,Math.round(+settings.defaultPack||1));packSrc='default'}}
+  const byCase=vc.by==='case'&&pack>1;
+  let cases=0,units=0;
+  const held=!!ov.noReorder;
+  if(!held&&base>0&&need>0){
+    if(byCase){
+      cases=Math.floor(need/pack);
+      if((need-cases*pack)/pack>=settings.roundUp/100)cases++;
+      if(cases===0&&position<demandL+ss)cases=1;
+      units=cases*pack;
+    }else units=Math.ceil(need-1e-9);
+  }
+  const daily30=base*s30;
+  const dos=daily30>0?Math.max(0,onHand)/daily30:Infinity;
+  const lastSale=it.lastSale,daysSince=lastSale!=null?T-1-lastSale:null;
+  const histDays=T-ctx.minDay;
+  const flags=[];
+  if(onHand<0)flags.push('count');
+  if(held)flags.push('hold');
+  if(base>0&&onHand<=0)flags.push('oos');
+  else if(base>0&&position<demandL)flags.push('risk');
+  if(it.firstSale!=null&&T-it.firstSale<28&&it.firstSale-ctx.minDay>14)flags.push('new');
+  const dead=ctx.hasSales&&onHand>0&&histDays>=settings.deadDays&&(daysSince==null||daysSince>=settings.deadDays);
+  if(dead)flags.push('dead');
+  else if(onHand>0&&dos>settings.overstockDays)flags.push('over');
+  if(ranges.length)flags.push('fixed');
+  if(it.spread)flags.push('spread');
+  const overUnits=flags.includes('over')?Math.max(0,onHand-daily30*settings.overstockDays):0;
+  const tied=dead?onHand*it.cost:overUnits*it.cost;
+  const urg=flags.includes('oos')?0:flags.includes('risk')?1:units>0?2:3;
+  return {key:it.key,it,cls:it.cls,start,n,arr,exc,ranges,excDays,w28,w91,w365,raw,adj,base,s30,s60,s90,sP,
+    f30:base*s30*30,f60:base*s60*60,f90:base*s90*90,perWk:daily30*7,sigmaD,z,svc,L,R,P,demandP,demandL,ss,target,
+    onHand,onOrder,position,need,pack,packSrc,byCase,cases,units,cost:units*it.cost,held,dos,lastSale,daysSince,flags,tied,overUnits,urg,seasonal};
+}
+
+/* ---------- rendering ---------- */
+const FLAG={
+  onorder:['On your order','acc'],
+  oos:['Out of stock','crit'],risk:['Runs out before delivery','warn'],count:['Negative count','crit'],hold:['Not reordering','idle'],
+  qd:['Quantity deal','ok'],new:['New item','acc'],dead:['No recent sales','idle'],over:['Overstocked','idle'],fixed:['Stockout days ignored','idle'],spread:['Period totals','idle']};
+const chips=(r,skip=[])=>'<div class="chips">'+r.flags.filter(f=>!skip.includes(f)).map(f=>`<span class="chip ${FLAG[f][1]}">${FLAG[f][0]}</span>`).join('')+'</div>';
+const dosTxt=d=>!isFinite(d)?'—':d>=999?'999+':int(d);
+
+function filtered(){
+  if(!S.res)return [];
+  const q=S.q.trim().toLowerCase(),qc=normCode(S.q);
+  return S.res.results.filter(r=>{
+    if(S.vendor&&r.it.vendor!==S.vendor)return false;
+    if(S.cat&&r.it.category!==S.cat)return false;
+    if(S.flag&&!r.flags.includes(S.flag))return false;
+    if(q){const it=r.it;if(!(it.name.toLowerCase().includes(q)||(qc&&(normCode(it.sku).includes(qc)||normCode(it.upc).includes(qc)))))return false}
+    return true;
+  });
+}
+const SORTERS={
+  ord:r=>r.ordCost,
+  name:r=>r.it.name.toLowerCase()+' '+r.it.size,vendor:r=>r.it.vendor.toLowerCase(),cls:r=>r.cls,onHand:r=>r.onHand,wk:r=>r.perWk,
+  dos:r=>isFinite(r.dos)?r.dos:1e9,f30:r=>r.f30,f60:r=>r.f60,f90:r=>r.f90,units:r=>r.units,cost:r=>r.cost,
+  urg:r=>r.urg*1e6+(isFinite(r.dos)?r.dos:9e5),tied:r=>r.tied,last:r=>r.daysSince??1e9};
+function sortRows(list,view){
+  const [k,dir]=S.sort[view];const f=SORTERS[k];
+  return list.sort((a,b)=>{const x=f(a),y=f(b);return(x<y?-1:x>y?1:0)*dir});
+}
+
+function renderAll(){
+  renderSources();renderKpis();renderTabs();renderFilters();renderView();
+  const r=S.res;
+  $('#subline').textContent=r?(r.hasSales?`Sales through ${fmtDay(r.ctx.T-1)} · ${int(r.results.length)} items · ${int(r.ctx.N)} days of history`:`${int(r.results.length)} items · add sales history to get forecasts`):'Load an inventory list to begin';
+  $('#sampleBanner').hidden=!S.sample;
+}
+
+function renderSources(){
+  const inv=S.inv;
+  $('#invFiles').innerHTML=inv?`<li><span>${esc(inv.fileName)}</span><small>${int(inv.items.length)} items</small></li>`:'<li><span>No file loaded</span></li>';
+  const r=S.res,ovl=r?r.overlaps:new Set();
+  // newest first; long histories collapse to the latest few
+  const order=S.sales.map((f,i)=>i).sort((a,b)=>S.sales[b].from-S.sales[a].from);
+  const showAll=S.showAllFiles||order.length<=6;
+  const li=i=>{const f=S.sales[i];return `<li><span>${esc(f.fileName)}</span><small>${ovl.has(i)?'<span class="chip warn">Overlaps another file</span> ':''}${f.from===f.to?fmtDay(f.from):fmtDayShort(f.from)+' – '+fmtDay(f.to)}${S.sample?'':` <button class="x" data-rm="${i}" type="button" aria-label="Remove ${esc(f.fileName)}">×</button>`}</small></li>`};
+  $('#salesFiles').innerHTML=S.sales.length?(showAll?order:order.slice(0,4)).map(li).join('')+(showAll?'':`<li><button class="btn ghost small" id="btnAllFiles" type="button">Show all ${order.length} files</button></li>`):'<li><span>No files loaded</span></li>';
+  const bf=$('#btnAllFiles');if(bf)bf.onclick=()=>{S.showAllFiles=true;renderSources()};
+  $('#btnClear').hidden=S.sample;
+  $('#btnClearSales').hidden=S.sample||!S.sales.length;
+  if(S.sample||!S.sales.length)$('#salesConfirm').hidden=true;
+  let h='';
+  if(ovl.size)h+=`<div class="matchline" style="color:var(--warn)"><span>Some sales files cover the same days, so those sales are counted twice. Remove the duplicates. (Advent’s Hourly and Departmentwise reports hold the same sales, so load only one of them per week.)</span></div>`;
+  if(r&&r.totalRows&&!S.sample){
+    const pct=r.matched/r.totalRows*100;
+    h+=`<div class="matchline"><span>${int(r.totalRows)} sales rows read</span><span>${pct.toFixed(pct>99.5&&pct<100?1:0)}% matched to inventory items</span>${r.ctx.seasonOK?'<span>Seasonal adjustment on</span>':`<span>Seasonal adjustment needs about 15 months of sales history (you have ${int(r.ctx.N)} days)</span>`}</div>`;
+    const neg=r.results.filter(x=>x.onHand<0).length,noCost=r.results.filter(x=>!x.it.cost&&x.ord>0).length,noDist=r.results.some(x=>x.it.vendor===NO_DIST);
+    const notes=[];
+    if(neg)notes.push(`<span><button class="btn ghost small" type="button" data-flag="count">${int(neg)} item${neg===1?' shows':'s show'} negative stock in Advent</button> ${neg===1?'It’s':'They’re'} treated as 0, so ${neg===1?'its order is':'their orders are'} only as good as the count.</span>`);
+    if(noCost)notes.push(`<span>${int(noCost)} item${noCost===1?'':'s'} on your order ${noCost===1?'has':'have'} no cost in Advent, so the order total runs low.</span>`);
+    if(noDist)notes.push(`<span>The inventory list has no distributor column. <button class="btn ghost small" type="button" data-open="settings">Assign distributors by department</button></span>`);
+    if(notes.length)h+=`<div class="matchline">${notes.join('')}</div>`;
+    if(r.unmatched.size){
+      const top=[...r.unmatched.entries()].sort((a,b)=>b[1]-a[1]).slice(0,60);
+      h+=`<details class="unmatched"><summary>${int(r.unmatched.size)} sold item${r.unmatched.size===1?' isn’t':'s aren’t'} in the inventory list and ${r.unmatched.size===1?'was':'were'} skipped</summary><ul>${top.map(([k,q])=>`<li>${esc(k)} <span class="mono">(${int(q)} sold)</span></li>`).join('')}</ul></details>`;
+    }
+  }
+  $('#matchInfo').innerHTML=h;$('#matchInfo').hidden=!h;
+  $$('[data-flag]',$('#matchInfo')).forEach(b=>b.onclick=()=>{S.view='all';S.flag=b.dataset.flag;S.limit=200;renderTabs();renderFilters();renderView();$('#tabs').scrollIntoView({behavior:'smooth'})});
+  $$('[data-open]',$('#matchInfo')).forEach(b=>b.onclick=openSettings);
+}
+
+function renderMapper(scroll=true){
+  const el=$('#mapper');const p=S.pending[0];
+  if(!p){el.innerHTML='';return}
+  // files with the same columns are matched once, together
+  const sig=sigOf(p.headers);
+  const group=S.pending.filter(x=>x.kind===p.kind&&sigOf(x.headers)===sig);
+  const fields=p.kind==='inv'?INV_FIELDS:SALES_FIELDS;
+  const opts=sel=>'<option value="">— not in file —</option>'+p.headers.map((h,i)=>`<option value="${i}"${sel===i?' selected':''}>${esc(h)}</option>`).join('');
+  const usedCols=new Set(Object.values(p.map));
+  const body=p.rows.slice(p.headerIdx+1,p.headerIdx+7);
+  const cell=v=>v instanceof Date?v.toLocaleDateString('en-US'):String(v??'');
+  const noDate=p.kind==='sales'&&p.map.date==null;
+  const rest=S.pending.length-group.length;
+  // a file that ends on the day another starts is read as ending the day before, so no day is counted twice
+  if(noDate)for(const x of group){
+    if(x.endCut||x.from==null||x.to==null||x.to<=x.from)continue;
+    if(group.some(y=>y!==x&&y.from===x.to)||S.sales.some(f=>f.from===x.to)){x.to-=1;x.endCut=true}
+  }
+  const dateRows=group.map((x,i)=>`<tr><td>${esc(x.fileName)}${x.endCut?`<div class="sub">Advent cut-off at 5 AM on ${fmtDayShort(x.to+1)}, so sales through ${fmtDayShort(x.to)}</div>`:''}</td><td><input id="dF${i}" data-g="${i}" data-w="from" type="date" value="${x.from!=null?toIso(x.from):''}" aria-label="First day for ${esc(x.fileName)}"></td><td><input id="dT${i}" data-g="${i}" data-w="to" type="date" value="${x.to!=null?toIso(x.to):''}" aria-label="Last day for ${esc(x.fileName)}"></td><td class="mono">${x.from!=null&&x.to!=null&&x.to>=x.from?x.to-x.from+1:'—'}</td></tr>`).join('');
+  el.innerHTML=`<div class="mapper">
+    <div class="row" style="justify-content:space-between"><h3>Match columns: ${group.length>1?`${group.length} files with the same columns`:esc(p.fileName)}</h3><span class="hint">${rest>0?`${rest} more file(s) after this`:''}</span></div>
+    <p class="hint">${p.kind==='inv'?'This is your inventory list.':'This is a sales report.'} The planner guessed which column is which. Check the guesses against the preview and fix any that are wrong. Your choices are remembered for the next export with the same columns.</p>
+    <div class="map-grid">
+      <div class="field"><label for="mHdr">Header row (row number in file)</label><input id="mHdr" type="number" min="1" max="${Math.min(40,p.rows.length)}" value="${p.headerIdx+1}"></div>
+      ${fields.map(f=>`<div class="field"><label for="m_${f.k}">${f.label}${f.req?' <i>*</i>':''}</label><select id="m_${f.k}" data-f="${f.k}">${opts(p.map[f.k])}</select></div>`).join('')}
+    </div>
+    ${noDate?`<div><div class="label" style="margin-bottom:4px">Dates each file covers</div>
+      <p class="hint" style="margin-bottom:8px">These reports have no date column, so tell the planner which days each one covers. Dates in the file name fill in on their own. Advent’s names, like <span class="mono">Item_Sales_Report_2026-10-12_to_2026-10-19</span>, end at its 5 AM cut-off, so that file is read as Oct 12–18. Otherwise enter the first file’s start date and fill the rest down as back-to-back weeks.</p>
+      <div class="row" style="margin-bottom:8px"><button class="btn small" id="fillWeeks" type="button">Fill down as weekly, oldest first</button><button class="btn small" id="sortNames" type="button">Sort files by name</button></div>
+      <div class="tablewrap"><table class="vend"><thead><tr><th>File</th><th>First day</th><th>Last day</th><th>Days</th></tr></thead><tbody>${dateRows}</tbody></table></div></div>`:''}
+    <div class="preview"><table><thead><tr>${p.headers.map((h,i)=>`<th class="${usedCols.has(i)?'used':''}">${esc(h)}</th>`).join('')}</tr></thead><tbody>${body.map(r=>`<tr>${p.headers.map((_,i)=>`<td>${esc(cell(r[i]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    <div class="err" id="mErr" role="alert"></div>
+    <div class="row"><button class="btn primary" id="mApply" type="button">${group.length>1?`Load ${group.length} files`:'Use these columns'}</button><button class="btn ghost" id="mSkip" type="button">Skip ${group.length>1?'these files':'this file'}</button></div>
+  </div>`;
+  const syncGroup=()=>group.forEach(x=>{if(x!==p){x.headerIdx=p.headerIdx;x.headers=p.headers;x.map=Object.assign({},p.map)}});
+  $('#mHdr').onchange=e=>{const v=Math.max(1,Math.min(p.rows.length,+e.target.value||1));setHeader(p,v-1);group.forEach(x=>{if(x!==p)setHeader(x,v-1)});renderMapper(false)};
+  $$('select[data-f]',el).forEach(s=>s.onchange=()=>{const v=s.value;if(v==='')delete p.map[s.dataset.f];else p.map[s.dataset.f]=+v;syncGroup();renderMapper(false)});
+  if(noDate){
+    $$('input[data-g]',el).forEach(inp=>inp.onchange=()=>{const x=group[+inp.dataset.g];x[inp.dataset.w]=fromIso(inp.value);if(inp.dataset.w==='to')x.endCut=false;if(inp.dataset.w==='from'&&x.to==null&&x.from!=null){x.to=x.from+6;renderMapper(false)}});
+    $('#fillWeeks').onclick=()=>{
+      const first=group[0];
+      if(first.from==null){$('#mErr').textContent='Enter the first day of the first file, then fill down.';return}
+      const len=first.to!=null&&first.to>=first.from?first.to-first.from+1:7;
+      group.forEach((x,i)=>{x.from=first.from+i*len;x.to=x.from+len-1});
+      renderMapper(false);
+    };
+    $('#sortNames').onclick=()=>{
+      const sorted=group.slice().sort((a,b)=>a.fileName.localeCompare(b.fileName,undefined,{numeric:true}));
+      const others=S.pending.filter(x=>!group.includes(x));
+      S.pending=[...sorted,...others];renderMapper(false);
+    };
+  }
+  $('#mSkip').onclick=()=>{S.pending=S.pending.filter(x=>!group.includes(x));renderMapper()};
+  $('#mApply').onclick=()=>{
+    syncGroup();
+    const outs=[];
+    for(const x of group){
+      try{outs.push([x,applyPending(x)])}
+      catch(e){$('#mErr').textContent=(group.length>1?x.fileName+': ':'')+e.message;return}
+    }
+    const named={};for(const [f,i] of Object.entries(p.map))named[f]=p.headers[i];
+    store.set('map.'+p.kind+'.'+sigOf(p.headers),named);
+    if(S.sample){S.sample=false;S.inv=null;S.sales=[];resetQuick()}
+    let rows=0,bad=0;
+    for(const [x,out] of outs){out.id=newId();if(x.kind==='inv'){S.inv=out}else{S.sales.push(out);rows+=out.rows.length;bad+=out.bad||0}}
+    cloudUpload(outs.map(([x,out])=>({x,out,named})));
+    S.pending=S.pending.filter(x=>!group.includes(x));
+    toast(p.kind==='inv'?`Loaded ${int(outs[0][1].items.length)} items`:`Loaded ${outs.length} file${outs.length===1?'':'s'}, ${int(rows)} sales rows${bad?` (${int(bad)} rows skipped: unreadable date or quantity)`:''}`);
+    persist();recompute();renderMapper();
+  };
+  if(scroll)el.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function renderKpis(){
+  const r=S.res;const el=$('#kpis');
+  if(!r){el.innerHTML='';return}
+  const R=r.results;
+  const ord=R.filter(x=>x.units>0),oos=R.filter(x=>x.flags.includes('oos')&&!x.held),risk=R.filter(x=>x.flags.includes('risk')&&!x.held);
+  const dead=R.filter(x=>x.flags.includes('dead')),over=R.filter(x=>x.flags.includes('over')),neg=R.filter(x=>x.onHand<0);
+  const sumc=(a,f)=>a.reduce((s,x)=>s+f(x),0);
+  const vendors=new Set(ord.map(x=>x.it.vendor)),mine=R.filter(x=>x.ord>0),myV=new Set(mine.map(x=>x.it.vendor));
+  const tile=(dot,k,v,s,go)=>`<button class="kpi" type="button" data-go="${go}"><span class="k"><span class="dot ${dot}"></span>${k}</span><span class="v">${v}</span><span class="s">${s}</span></button>`;
+  el.innerHTML=
+    tile('acc','Suggested to order',int(ord.length),`from ${vendors.size} distributor${vendors.size===1?'':'s'}`,'reorder')+
+    tile('acc','Your order',money(sumc(mine,x=>x.ordCost)),`${int(mine.length)} item${mine.length===1?'':'s'} · ${myV.size} distributor${myV.size===1?'':'s'}`,'sheets')+
+    tile('crit','Out of stock',int(oos.length),'items that normally sell','reorder')+
+    tile('warn','Runs out before delivery',int(risk.length),'stock won’t last the lead time','reorder')+
+    tile('','Dead stock',money(sumc(dead,x=>x.tied)),`${int(dead.length)} items, no sales in ${settings.deadDays} days`,'dead')+
+    tile('','Overstock',money(sumc(over,x=>x.tied)),`beyond ${settings.overstockDays} days of supply`,'dead')+
+    (r.dealSave>0?tile('ok','Deal savings',money(r.dealSave),'from QDs on your order','deals'):'')+
+    (neg.length?tile('crit','Negative counts',int(neg.length),'Advent shows less than zero','all:count'):'');
+  $$('.kpi',el).forEach(b=>b.onclick=()=>{const [v,f]=b.dataset.go.split(':');goTab(v,f||'')});
+}
+
+// moving to another tab starts it fresh: the quick QD check and the search/filters are cleared
+function goTab(v,flag=''){
+  if(v!==S.view){
+    resetQuick();
+    S.q='';S.vendor='';S.cat='';S.flag='';$('#q').value='';
+  }
+  if(flag)S.flag=flag;
+  S.view=v;S.limit=200;renderTabs();renderFilters();renderView();
+}
+function renderTabs(){
+  const r=S.res;
+  const c=r?{reorder:r.results.filter(x=>x.units>0||(x.flags.includes('oos')&&!x.held)).length,all:r.results.length,dead:r.results.filter(x=>x.flags.includes('dead')||x.flags.includes('over')).length,sheets:new Set(r.results.filter(x=>x.units>0).map(x=>x.it.vendor)).size}:{};
+  if(r)c.deals=dealsList().length;
+  const T=[['reorder','Reorder'],['sheets','Order sheets'],['deals','Quantity deals'],['all','All items'],['dead','Dead & overstock'],['how','How it works']];
+  $('#tabs').innerHTML=T.map(([k,l])=>`<button class="tab" role="tab" type="button" data-v="${k}" aria-selected="${S.view===k}">${l}${c[k]!=null?`<span class="c">${int(c[k])}</span>`:''}</button>`).join('');
+  $$('.tab').forEach(b=>b.onclick=()=>goTab(b.dataset.v));
+}
+
+function renderFilters(){
+  const r=S.res;const f=$('#filters');
+  f.hidden=!r||S.view==='how'||S.view==='deals';
+  if(!r)return;
+  const vs=[...new Set(r.results.map(x=>x.it.vendor))].sort(),cs=[...new Set(r.results.map(x=>x.it.category))].sort();
+  if(S.vendor&&!vs.includes(S.vendor))S.vendor='';if(S.cat&&!cs.includes(S.cat))S.cat='';
+  $('#fVendor').innerHTML='<option value="">All distributors</option>'+vs.map(v=>`<option${v===S.vendor?' selected':''}>${esc(v)}</option>`).join('');
+  $('#fCat').innerHTML='<option value="">All departments</option>'+cs.map(v=>`<option${v===S.cat?' selected':''}>${esc(v)}</option>`).join('');
+  $('#fFlag').innerHTML='<option value="">Any status</option>'+Object.entries(FLAG).map(([k,[l]])=>`<option value="${k}"${k===S.flag?' selected':''}>${l}</option>`).join('');
+  $('#btnExportAll').hidden=S.view!=='sheets'&&S.view!=='reorder';
+  $('#btnExportAll').textContent=S.view==='reorder'?'Add all shown to order':'Download all orders (CSV)';
+  $('#btnClearOrder').hidden=S.view!=='sheets';
+}
+
+function th(view,k,label,right){
+  const [sk,dir]=S.sort[view];
+  return `<th${k?` data-sort="${k}"`:''} class="${right?'r':''}" ${k?`aria-sort="${sk===k?(dir>0?'ascending':'descending'):'none'}"`:''}>${label}${sk===k?` <span class="arr">${dir>0?'▲':'▼'}</span>`:''}</th>`;
+}
+function orderCell(r){
+  if(!r.units)return '<td class="r order"><span class="sub">—</span></td>';
+  return r.byCase?`<td class="r order"><b>${r.cases} cs</b><div class="sub">${int(r.units)} units${r.packSrc==='est'?` · ${r.pack}/cs est.`:''}</div></td>`:`<td class="r order"><b>${int(r.units)}</b><div class="sub">units</div></td>`;
+}
+// last column on the Reorder and All items lists: add the item, or see what's already on the order
+function actionCell(r){
+  if(r.ord>0)return `<td class="r act"><div class="on-order"><span>✓ ${qtyShort(r,r.ord)}</span><button class="x rm" type="button" data-unadd="${esc(r.key)}" aria-label="Take ${esc(r.it.name)} off your order" title="Take off your order">×</button></div>${r.qdId?'<div class="sub">in a QD</div>':''}</td>`;
+  if(r.held)return '<td class="r act"><span class="sub">not reordering</span></td>';
+  const u=r.units>0?r.units:stepOf(r);
+  return `<td class="r act"><button class="btn small add" type="button" data-add="${esc(r.key)}" data-u="${u}">Add ${qtyShort(r,u)}</button></td>`;
+}
+function bindOrderButtons(el){
+  $$('[data-add]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const r=S.res.byKey.get(b.dataset.add);setOrder(b.dataset.add,+b.dataset.u);toast(`Added ${r.it.name} to your order`)});
+  $$('[data-unadd]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const r=S.res.byKey.get(b.dataset.unadd);setOrder(b.dataset.unadd,0);toast(`Took ${r.it.name} off your order`)});
+  $$('[data-ostep]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const r=S.res.byKey.get(b.dataset.k);setOrder(r.key,r.ord+(+b.dataset.ostep)*stepOf(r))});
+  $$('[data-oqty]',el).forEach(i=>{i.onclick=e=>e.stopPropagation();i.onchange=()=>{const r=S.res.byKey.get(i.dataset.oqty);if(i.value==='')return;setOrder(r.key,Math.max(0,Math.round(+i.value||0))*stepOf(r))}});
+}
+const itemCell=r=>`<td><div class="nm">${esc(r.it.name)}</div><div class="sub">${esc([r.it.size,r.it.pack,r.it.sku?'#'+r.it.sku:'',r.it.category].filter(Boolean).join(' · '))}</div></td>`;
+
+// one line adding up everything the table below is showing (follows search and filters)
+function renderTotals(rows,view){
+  const el=$('#totals');
+  if(!rows){el.hidden=true;return}
+  const ord=rows.filter(x=>x.units>0);
+  const cs=ord.filter(x=>x.byCase).reduce((s,x)=>s+x.cases,0),loose=ord.filter(x=>!x.byCase).reduce((s,x)=>s+x.units,0);
+  const units=ord.reduce((s,x)=>s+x.units,0),cost=ord.reduce((s,x)=>s+x.cost,0);
+  const oh=rows.reduce((s,x)=>s+Math.max(0,x.onHand),0),ohVal=rows.reduce((s,x)=>s+Math.max(0,x.onHand)*x.it.cost,0);
+  const span=(n,label)=>`<span><b>${n}</b> ${label}</span>`;
+  let parts;
+  if(view==='dead')parts=[span(int(rows.length),rows.length===1?'item':'items'),span(int(oh),'units on hand'),span(money(rows.reduce((s,x)=>s+x.tied,0)),'cash tied up')];
+  else{
+    parts=[span(int(rows.length),rows.length===1?'item':'items')];
+    if(view!=='sheets'&&ord.length!==rows.length)parts.push(span(int(ord.length),'suggested'));
+    parts.push(span(int(cs),cs===1?'case':'cases'));
+    if(loose)parts.push(span(int(loose),'single units'));
+    parts.push(span(int(units),'units in all'),span(money(cost),view==='sheets'?'order cost':'suggested cost'));
+    if(view==='all')parts.push(span(int(oh),'units on hand'),span(money(ohVal),'stock value'));
+    if(view!=='sheets'){const mine=rows.filter(x=>x.ord>0);if(mine.length)parts.push(span(int(mine.length),'on your order'))}
+  }
+  el.innerHTML=parts.join('');el.hidden=false;
+}
+function renderView(){
+  const el=$('#view');const r=S.res;
+  if(!r||S.view==='how'||S.view==='deals')renderTotals(null);
+  if(S.view==='how'){el.innerHTML=howHtml();return}
+  if(!r){el.innerHTML='<div class="tablewrap"><div class="empty">Load your inventory list to see reorder suggestions.</div></div>';return}
+  if(S.view==='sheets'){renderTotals(filtered().filter(x=>x.ord>0).map(x=>({...x,units:x.ord,cases:x.ordCases,cost:x.ordCost})),'sheets');renderSheets(el);return}
+  if(S.view==='deals'){renderDeals(el);return}
+  let list=filtered();const view=S.view;
+  if(view==='reorder')list=list.filter(isSuggested);
+  if(view==='dead')list=list.filter(x=>x.flags.includes('dead')||x.flags.includes('over'));
+  renderTotals(list,view);
+  sortRows(list,view);
+  // on the Reorder list each QD added from the quick check sits together under its own heading
+  const qdGroups=[];
+  if(view==='reorder'&&r.qdPlans){
+    const inList=new Set(list);
+    for(const o of qdList()){
+      const p=r.qdPlans.get(o.id);if(!p)continue;
+      const rs=p.applied?p.items.map(i=>i.r).filter(x=>inList.has(x)):[];
+      if(p.applied&&!rs.length)continue;
+      rs.forEach(x=>inList.delete(x));qdGroups.push({o,p,rs});
+    }
+    list=list.filter(x=>inList.has(x));
+  }
+  const shown=list.slice(0,S.limit);
+  let head,row;
+  if(view==='dead'){
+    head=`<tr>${th(view,'name','Item')}${th(view,'vendor','Distributor')}${th(view,'onHand','On hand',1)}${th(view,'last','Last sold',1)}${th(view,'wk','Sells / wk',1)}${th(view,'dos','Days of supply',1)}${th(view,'tied','Cash tied up',1)}<th>Notes</th></tr>`;
+    row=x=>`<tr data-key="${esc(x.key)}">${itemCell(x)}<td>${esc(x.it.vendor)}</td><td class="r">${int(x.onHand)}</td><td class="r">${x.lastSale!=null?fmtDayShort(x.lastSale)+'<div class="sub">'+int(x.daysSince)+' days ago</div>':'never'}</td><td class="r">${dec1(x.perWk)}</td><td class="r">${dosTxt(x.dos)}</td><td class="r">${money(x.tied)}</td><td>${chips(x)}</td></tr>`;
+  }else{
+    head=`<tr>${th(view,'name','Item')}${th(view,'vendor','Distributor')}${th(view,'cls','Rank')}${th(view,'onHand','On hand',1)}${th(view,'wk','Sells / wk',1)}${th(view,'dos','Days left',1)}${th(view,'f30','Next 30d',1)}${th(view,'f60','60d',1)}${th(view,'f90','90d',1)}${th(view,'units','Suggested',1)}${th(view,'cost','Cost',1)}${view==='reorder'?th(view,'urg','Priority'):'<th>Notes</th>'}${th(view,'ord','Your order',1)}</tr>`;
+    row=x=>`<tr data-key="${esc(x.key)}">${itemCell(x)}<td>${esc(x.it.vendor)}</td><td><span class="abc ${x.cls}" title="${x.cls} item">${x.cls}</span></td><td class="r">${int(x.onHand)}${x.onOrder?`<div class="sub">+${int(x.onOrder)} on order</div>`:''}</td><td class="r">${dec1(x.perWk)}</td><td class="r">${dosTxt(x.dos)}</td><td class="r">${int(x.f30)}</td><td class="r">${int(x.f60)}</td><td class="r">${int(x.f90)}</td>${orderCell(x)}<td class="r">${x.units?money(x.cost):''}</td><td>${chips(x,['onorder'])}</td>${actionCell(x)}</tr>`;
+  }
+  const emptyMsg=view==='reorder'?'Nothing needs ordering with the current filters.':view==='dead'?'No dead or overstocked items with the current filters.':'No items match.';
+  const cols=view==='dead'?8:13;
+  const groupHtml=qdGroups.map(g=>qdHeadRow(g,cols)+g.rs.map(row).join('')).join('');
+  const restHead=qdGroups.length&&shown.length?`<tr class="qd-head rest"><td colspan="${cols}"><b>Everything else</b></td></tr>`:'';
+  el.innerHTML=`<div class="tablewrap"><table class="items"><thead>${head}</thead><tbody>${groupHtml}${restHead}${shown.map(row).join('')}</tbody></table>${list.length||qdGroups.length?'':`<div class="empty">${emptyMsg}</div>`}${list.length>S.limit?`<div class="more"><button class="btn" id="btnMore" type="button">Show ${int(Math.min(200,list.length-S.limit))} more of ${int(list.length-S.limit)}</button></div>`:''}</div>`;
+  bindOrderButtons(el);
+  $$('th[data-sort]',el).forEach(h=>h.onclick=()=>{const k=h.dataset.sort;const cur=S.sort[view];S.sort[view]=[k,cur[0]===k?-cur[1]:(['name','vendor','cls','dos','urg','last'].includes(k)?1:-1)];renderView()});
+  $$('tbody tr[data-key]',el).forEach(tr=>tr.onclick=()=>openDetail(tr.dataset.key));
+  bindQdButtons(el);
+  const m=$('#btnMore');if(m)m.onclick=()=>{S.limit+=200;renderView()};
+}
+
+const isSuggested=x=>x.units>0||x.ord>0||(x.flags.includes('oos')&&!x.held);
+const reorderList=()=>filtered().filter(isSuggested);
+function orderGroups(){
+  const list=filtered().filter(x=>x.ord>0);
+  const g=new Map();
+  for(const x of list){if(!g.has(x.it.vendor))g.set(x.it.vendor,[]);g.get(x.it.vendor).push(x)}
+  return [...g.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([v,rows])=>({v,rows:rows.sort((a,b)=>a.it.name.localeCompare(b.it.name)),total:rows.reduce((s,x)=>s+x.ordCost,0),cfg:vendorOf(v)}));
+}
+// order sheet rows with each QD's items kept together under a small heading
+function qdParts(rows){
+  const parts=[],rest=[];
+  for(const o of qdList()){const rs=rows.filter(x=>x.qdId===o.id);if(rs.length)parts.push({o,rs})}
+  for(const x of rows)if(!x.qdId||!parts.some(p=>p.o.id===x.qdId))rest.push(x);
+  return {parts,rest};
+}
+function sheetBody(rows){
+  const line=x=>{const st=stepOf(x);return `<tr data-key="${esc(x.key)}">${itemCell(x)}<td class="mono sub">${esc(x.it.upc||'')}</td><td class="r">${int(x.onHand)}</td><td class="r sub">${x.units?qtyShort(x,x.units):'—'}</td>
+    <td class="r"><div class="stepper"><button type="button" data-ostep="-1" data-k="${esc(x.key)}" aria-label="One less ${x.byCase?'case':'unit'} of ${esc(x.it.name)}">−</button><input type="number" min="0" step="1" inputmode="numeric" data-oqty="${esc(x.key)}" value="${x.ord/st}" aria-label="${x.byCase?'Cases':'Units'} of ${esc(quickLabel(x))}"><button type="button" data-ostep="1" data-k="${esc(x.key)}" aria-label="One more ${x.byCase?'case':'unit'} of ${esc(x.it.name)}">+</button></div><div class="sub">${x.byCase?`cs of ${x.pack} = ${int(x.ord)}`:'units'}</div></td>
+    <td class="r">${money2(x.it.cost)}</td><td class="r">${money2(x.ordCost)}</td><td class="r"><button class="x rm" type="button" data-unadd="${esc(x.key)}" aria-label="Take ${esc(x.it.name)} off your order" title="Take off your order">×</button></td></tr>`};
+  const {parts,rest}=qdParts(rows);
+  return parts.map(p=>{const uw=p.o.countIn==='case'?'case':'bottle',n=p.rs.reduce((s,x)=>s+(p.o.countIn==='case'?x.ord/x.pack:x.ord),0);
+    return `<tr class="qd-head"><td colspan="8"><b>${esc(p.o.name)}</b><span class="sub"> · ${countTxt(n,uw)}${+p.o.qty>0?` (QD ${countTxt(+p.o.qty,uw)})`:''}</span>${+p.o.qty>0&&n+1e-9<+p.o.qty?' <span class="chip warn">Short of the QD</span>':''}</td></tr>`+p.rs.map(line).join('')}).join('')
+    +(parts.length&&rest.length?'<tr class="qd-head rest"><td colspan="8"><b>Everything else</b></td></tr>':'')+rest.map(line).join('');
+}
+function renderSheets(el){
+  const groups=orderGroups();
+  if(!groups.length){
+    const any=S.res.results.some(x=>x.ord>0);
+    el.innerHTML=`<div class="tablewrap"><div class="empty">${any?'Nothing on your order matches the current filters.':'Your order is empty. Add items from the Reorder list, or add a QD from Quantity deals.'}${any?'':'<div style="margin-top:12px"><button class="btn primary" id="goReorder" type="button">Go to the Reorder list</button></div>'}</div></div>`;
+    const g=$('#goReorder');if(g)g.onclick=()=>goTab('reorder');return;
+  }
+  el.innerHTML='<div class="sheets">'+groups.map((g,gi)=>{
+    const short=g.cfg.min>0&&g.total<g.cfg.min,noCost=g.rows.filter(x=>!x.it.cost).length,est=g.rows.filter(x=>x.byCase&&x.packSrc==='est').length;
+    return `<section class="sheet"><div class="sheet-head"><div><h3>${esc(g.v)}</h3><div class="sheet-meta"><span>${g.rows.length} item${g.rows.length===1?'':'s'}</span><span>${money2(g.total)} at cost</span><span>Delivery in ${g.cfg.lead} day${g.cfg.lead==1?'':'s'}, ordering every ${g.cfg.cycle} days</span>${short?`<span class="chip warn">Below ${money(g.cfg.min)} minimum</span>`:''}${noCost?`<span class="chip">${noCost} without a cost</span>`:''}${est?`<span class="chip">${est} with estimated case size</span>`:''}</div>${g.v===NO_DIST?'<p class="hint" style="margin-top:4px">Open Settings and pick a distributor for each department to split this into real order sheets.</p>':''}</div>
+      <div class="row"><button class="btn small" type="button" data-copy="${gi}">Copy</button><button class="btn small" type="button" data-dl="${gi}">Download CSV</button></div></div>
+      <div class="tablewrap"><table class="items"><thead><tr><th>Item</th><th>UPC</th><th class="r">On hand</th><th class="r">Suggested</th><th class="r">Order</th><th class="r">Unit cost</th><th class="r">Total</th><th></th></tr></thead><tbody>
+      ${sheetBody(g.rows)}
+      </tbody></table></div></section>`;
+  }).join('')+'</div>';
+  bindOrderButtons(el);
+  $$('[data-copy]',el).forEach(b=>b.onclick=()=>copyText(toCsv([groups[+b.dataset.copy]])));
+  $$('[data-dl]',el).forEach(b=>b.onclick=()=>{const g=groups[+b.dataset.dl];saveFile(`order-${g.v.replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()}-${toIso(S.res.ctx.T)}.csv`,toCsv([g]))});
+  $$('tbody tr[data-key]',el).forEach(tr=>tr.onclick=()=>openDetail(tr.dataset.key));
+}
+function toCsv(groups){
+  const q=v=>{const s=String(v??'');return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
+  const lines=[['Distributor','Deal','Item #','UPC','Description','Size','Cases','Units per case','Units','Unit cost','Total cost'].join(',')];
+  for(const g of groups){
+    const {parts,rest}=qdParts(g.rows);
+    for(const p of parts)for(const x of p.rs)lines.push([g.v,p.o.name,x.it.sku,x.it.upc,x.it.name,x.it.size,x.byCase?x.ordCases:'',x.byCase?x.pack:'',x.ord,x.it.cost.toFixed(2),x.ordCost.toFixed(2)].map(q).join(','));
+    for(const x of rest)lines.push([g.v,'',x.it.sku,x.it.upc,x.it.name,x.it.size,x.byCase?x.ordCases:'',x.byCase?x.pack:'',x.ord,x.it.cost.toFixed(2),x.ordCost.toFixed(2)].map(q).join(','));
+  }
+  return lines.join('\n');
+}
+async function saveFile(name,text){
+  try{
+    const dl=await dlP;
+    if(dl){await dl.save({filename:name,data:text});toast('Saved '+name);return}
+  }catch(e){if(e&&e.code==='declined')return;if(e&&e.code&&e.code!=='unavailable'&&e.code!=='not_granted'){toast('Couldn’t save the file. Use Copy instead.');return}}
+  try{
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'}));a.download=name;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  }catch(e){copyText(text)}
+}
+function copyText(text){
+  const fallback=()=>{openPanel(`<div class="drawer-head"><h2>Copy order</h2><button class="btn ghost" data-close type="button">Close</button></div><p class="hint">Select all and copy, then paste into an email or spreadsheet.</p><textarea class="copy" id="copyBox" readonly>${esc(text)}</textarea>`);const t=$('#copyBox');t.focus();t.select()};
+  try{navigator.clipboard.writeText(text).then(()=>toast('Copied. Paste it into an email or spreadsheet.'),fallback)}catch(e){fallback()}
+}
+
+/* ---------- quantity deals: view ---------- */
+const countTxt=(n,unit)=>`${Number.isInteger(Math.round(n*10)/10)?int(n):n.toFixed(1)} ${unit}${Math.abs(n-1)<1e-9?'':'s'}`;
+const unitWord=d=>d.countIn==='case'?'case':'bottle';
+function offTxt(t){return t.type==='pct'?`${+t.amt}% off`:`${money2(+t.amt)} off per ${t.type==='case'?'case':'bottle'}`}
+const mixTxt=d=>d.mixSizes&&d.mixFlavors?'Sizes and flavours mix':d.mixSizes?'Sizes mix':d.mixFlavors?'Flavours mix':'This item only';
+const qtyTxt=(r,u)=>!u?'—':r.byCase?`${int(u/r.pack)} cs <span class="sub">(${int(u)})</span>`:`${int(u)} units`;
+/* quick check: suggests a split, every quantity can be changed, then the whole QD goes on the order */
+// the sample store opens on a worked example; real data starts blank
+function resetQuick(){
+  if(S.quick.busy)S.quick.busy.abort();
+  Object.assign(S.quick,{anchor:'',qty:'',countIn:'case',mixSizes:false,mixFlavors:false,sizeSel:null,flavSel:null,disc:'',extra:[],manual:{},review:{},why:{},note:'',busy:null});
+  if(S.sample&&SAMPLE_DEALS[0])Object.assign(S.quick,{anchor:SAMPLE_DEALS[0].anchor,qty:'10',mixSizes:true});
+}
+function quickLabel(r){return r?[r.it.name,r.it.size,r.it.pack].filter(Boolean).join(' '):''}
+function renderQuickShell(){
+  const q=S.quick,a=q.anchor&&S.res.byKey.get(q.anchor);
+  return `<section class="sheet" id="quick"><div class="sheet-head"><div><h3>Quick QD check</h3><div class="sheet-meta"><span>Pick an item and enter the QD quantity. The planner suggests how many of each to order; change any of them, then add the whole QD to your order.</span></div></div></div>
+    <div class="quick-form">
+      <div class="field qf-item"><label for="qqItem">Item</label><input id="qqItem" type="search" autocomplete="off" placeholder="Search, e.g. Hennessy VS" value="${esc(quickLabel(a))}"><div class="results" id="qqRes" hidden></div></div>
+      <div class="field"><label for="qqQty">QD quantity</label><input id="qqQty" type="number" min="1" step="1" inputmode="numeric" value="${esc(q.qty)}" placeholder="e.g. 10"></div>
+      <div class="field"><label for="qqUnit">Counted in</label><select id="qqUnit"><option value="case"${q.countIn==='case'?' selected':''}>Cases</option><option value="unit"${q.countIn==='unit'?' selected':''}>Bottles</option></select></div>
+      <div class="qf-checks">
+        <div class="mixctl"><label class="check"><input id="qqSizes" type="checkbox"${q.mixSizes?' checked':''}> <span id="qqSizesL">Sizes mix</span></label><button class="caret" id="qqSizesDD" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Pick which sizes mix">▾</button><div class="mixpop" id="qqSizesPop" hidden></div></div>
+        <div class="mixctl"><label class="check"><input id="qqFlav" type="checkbox"${q.mixFlavors?' checked':''}> <span id="qqFlavL">Flavours mix</span></label><button class="caret" id="qqFlavDD" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Pick which flavours mix">▾</button><div class="mixpop" id="qqFlavPop" hidden></div></div>
+      </div>
+      <div class="field"><label for="qqDisc" id="qqDiscL">Discount per ${q.countIn==='case'?'case':'bottle'} (optional)</label><input id="qqDisc" type="number" min="0" step="0.01" value="${esc(q.disc)}" placeholder="$"></div>
+    </div>
+    <div id="qqOut"></div></section>`;
+}
+// search box with a scrolling pick list; every word must match, so "bacardi gold 375" finds Bacardi Gold 375ml
+function bindItemSearch(inp,box,onPick,skip){
+  inp.oninput=()=>{
+    const words=inp.value.trim().toLowerCase().split(/\s+/).filter(Boolean),c=normCode(inp.value);
+    const rs=!words.length||inp.value.trim().length<2?[]:S.res.results.filter(r=>{
+      if(skip&&skip.has(r.key))return false;
+      const l=quickLabel(r).toLowerCase();
+      return words.every(w=>l.includes(w))||(c&&(normCode(r.it.sku)===c||normCode(r.it.upc)===c));
+    }).sort((a,b)=>b.perWk-a.perWk).slice(0,40);
+    box.hidden=!rs.length;box.scrollTop=0;
+    box.innerHTML=rs.map(r=>`<button type="button" data-pk="${esc(r.key)}">${esc(r.it.name)} <span class="sub">${esc([r.it.size,r.it.pack,r.it.category,dec1(r.perWk)+'/wk'].filter(Boolean).join(' · '))}</span></button>`).join('');
+    $$('[data-pk]',box).forEach(b=>b.onclick=()=>{box.hidden=true;onPick(b.dataset.pk)});
+  };
+  inp.onkeydown=e=>{if(e.key==='Escape')box.hidden=true};
+}
+function bindQuick(){
+  const q=S.quick;
+  const inp=$('#qqItem');
+  bindItemSearch(inp,$('#qqRes'),k=>{q.anchor=k;q.extra=[];q.manual={};q.mixSizes=false;q.mixFlavors=false;q.sizeSel=null;q.flavSel=null;closeMixPops();q.review={};q.why={};q.note='';inp.value=quickLabel(S.res.byKey.get(k));renderQuickOut()});
+  $('#qqQty').oninput=e=>{q.qty=e.target.value;refreshQuick()};
+  $('#qqDisc').oninput=e=>{q.disc=e.target.value;refreshQuick()};
+  $('#qqUnit').onchange=e=>{q.countIn=e.target.value;$('#qqDiscL').textContent=`Discount per ${q.countIn==='case'?'case':'bottle'} (optional)`;renderQuickOut()};
+  // the checkbox mixes everything; the ▾ list picks only some
+  $('#qqSizes').onchange=e=>{q.mixSizes=e.target.checked;q.sizeSel=null;mixChanged()};
+  $('#qqFlav').onchange=e=>{q.mixFlavors=e.target.checked;q.flavSel=null;mixChanged()};
+  $('#qqSizesDD').onclick=e=>{e.stopPropagation();toggleMixPop('sizes')};
+  $('#qqFlavDD').onclick=e=>{e.stopPropagation();toggleMixPop('flavs')};
+  syncMixCtl();
+  renderQuickOut();
+}
+function mixChanged(){syncMixCtl();renderMixPops();renderQuickOut()}
+// checkbox shows ticked (all), half-ticked (some picked) or empty, with "(2 of 5)" when only some mix
+function syncMixCtl(){
+  const q=S.quick,o=mixOptions(q);
+  const set=(id,on,sel,list,word)=>{
+    const cb=$('#'+id);if(!cb)return;
+    const extra=list.filter(x=>!x.mine).length,picked=sel?sel.filter(k=>list.some(x=>x.k===k&&!x.mine)).length:extra;
+    cb.checked=on&&(!sel||picked===extra);cb.indeterminate=on&&!!sel&&picked<extra&&picked>0;
+    const off=!q.anchor||!extra;
+    $('#'+id+'L').textContent=`${word} mix${on&&sel&&picked<extra?` (${picked} of ${extra})`:''}`;
+    // greyed out until an item is picked, and when that item has nothing else to mix with
+    cb.disabled=off;$('#'+id+'DD').disabled=off;
+    cb.closest('.mixctl').classList.toggle('off',off);
+    cb.closest('.mixctl').title=!q.anchor?'Pick an item first':!extra?`No other ${word.toLowerCase()} of this item in your item list`:'';
+  };
+  set('qqSizes',q.mixSizes,q.sizeSel,o.sizes,'Sizes');
+  set('qqFlav',q.mixFlavors,q.flavSel,o.flavs.map(x=>({...x,mine:false})),'Flavours');
+}
+function closeMixPops(){for(const id of ['qqSizesPop','qqFlavPop']){const p=$('#'+id);if(p){p.hidden=true;const b=$('#'+id.replace('Pop','DD'));if(b)b.setAttribute('aria-expanded','false')}}}
+function toggleMixPop(which){
+  const id=which==='sizes'?'qqSizesPop':'qqFlavPop',p=$('#'+id),open=p.hidden;
+  closeMixPops();
+  if(open){p.hidden=false;$('#'+id.replace('Pop','DD')).setAttribute('aria-expanded','true');renderMixPops()}
+}
+function renderMixPops(){
+  const q=S.quick,o=mixOptions(q);
+  const sp=$('#qqSizesPop'),fp=$('#qqFlavPop');
+  if(sp&&!sp.hidden){
+    const on=k=>q.mixSizes&&(!q.sizeSel||q.sizeSel.includes(k));
+    sp.innerHTML=`<div class="mixpop-head"><b>Sizes that mix</b><span><button type="button" class="btn ghost small" data-mall="sizes">All</button><button type="button" class="btn ghost small" data-mnone="sizes">None</button></span></div>`+
+      o.sizes.map(x=>`<label class="check"><input type="checkbox" data-msize="${esc(x.k)}"${x.mine||on(x.k)?' checked':''}${x.mine?' disabled':''}> ${esc(x.label)} <span class="sub">${x.mine?'(the deal item)':x.n+' item'+(x.n===1?'':'s')}</span></label>`).join('');
+  }
+  if(fp&&!fp.hidden){
+    const on=k=>q.mixFlavors&&(!q.flavSel||q.flavSel.includes(k));
+    fp.innerHTML=`<div class="mixpop-head"><b>Flavours that mix</b><span><button type="button" class="btn ghost small" data-mall="flavs">All</button><button type="button" class="btn ghost small" data-mnone="flavs">None</button></span></div>`+
+      `<label class="check"><input type="checkbox" checked disabled> ${esc(o.anchorName)} <span class="sub">(the deal item)</span></label>`+
+      (o.flavs.length?o.flavs.map(x=>`<label class="check"><input type="checkbox" data-mflav="${esc(x.k)}"${on(x.k)?' checked':''}> ${esc(x.label)} <span class="sub">${x.n} item${x.n===1?'':'s'}</span></label>`).join(''):'<p class="hint">No other flavours of this brand in your item list.</p>');
+  }
+  for(const p of [sp,fp])if(p)p.onclick=e=>e.stopPropagation();
+  $$('[data-msize]',sp||document.createElement('div')).forEach(c=>c.onchange=()=>pickMix('sizes',c.dataset.msize,c.checked));
+  $$('[data-mflav]',fp||document.createElement('div')).forEach(c=>c.onchange=()=>pickMix('flavs',c.dataset.mflav,c.checked));
+  $$('[data-mall]').forEach(b=>b.onclick=()=>{if(b.dataset.mall==='sizes'){q.mixSizes=true;q.sizeSel=null}else{q.mixFlavors=true;q.flavSel=null}mixChanged()});
+  $$('[data-mnone]').forEach(b=>b.onclick=()=>{if(b.dataset.mnone==='sizes'){q.mixSizes=false;q.sizeSel=null}else{q.mixFlavors=false;q.flavSel=null}mixChanged()});
+}
+function pickMix(which,k,on){
+  const q=S.quick,o=mixOptions(q);
+  const all=which==='sizes'?o.sizes.filter(x=>!x.mine).map(x=>x.k):o.flavs.map(x=>x.k);
+  const mixKey=which==='sizes'?'mixSizes':'mixFlavors',selKey=which==='sizes'?'sizeSel':'flavSel';
+  let sel=q[mixKey]?(q[selKey]?q[selKey].slice():all.slice()):[];
+  sel=sel.filter(x=>x!==k);if(on)sel.push(k);
+  sel=sel.filter(x=>all.includes(x));
+  if(!sel.length){q[mixKey]=false;q[selKey]=null}
+  else if(sel.length===all.length){q[mixKey]=true;q[selKey]=null}
+  else{q[mixKey]=true;q[selKey]=sel}
+  // the list itself already shows the tick; redrawing it would lose its scroll position
+  renderQuickOut();
+}
+document.addEventListener('click',()=>closeMixPops());
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMixPops()});
+// quantities you set stay put; the planner fills the rest of the QD around them
+function quickModel(){
+  const q=S.quick,a=q.anchor&&S.res.byKey.get(q.anchor);if(!a)return null;
+  const auto=suggestFamily(q.anchor,q.mixSizes,q.mixFlavors,q.sizeSel,q.flavSel);
+  const fam=[...new Set([...auto,...q.extra])];
+  const rows=dealRows(fam).sort((x,y)=>y.r.perWk-x.r.perWk);
+  const cnt=(x,u)=>q.countIn==='case'?u/x.r.pack:u;
+  rows.forEach(x=>{x.normal=x.base;const m=q.manual[x.r.key];if(m!=null){x.base=m;x.locked=true}});
+  const qty=+q.qty;
+  const units=qty>0?fillRows(rows,qty,q.countIn,Infinity).units:rows.map(x=>x.base);
+  const total=rows.reduce((s,x,i)=>s+cnt(x,units[i]),0),normalTotal=rows.reduce((s,x)=>s+cnt(x,x.normal),0);
+  let extraCash=0,carry=0;
+  rows.forEach((x,i)=>{const e=units[i]-x.normal;extraCash+=Math.max(0,e)*x.cost;carry+=holdingCost(Object.assign({},x,{base:x.normal}),e)});
+  const disc=+q.disc>0?+q.disc:0;
+  return {q,a,auto,fam,rows,units,total,normalTotal,qty,extraCash,carry,disc,save:disc*total,uw:q.countIn==='case'?'case':'bottle'};
+}
+function quickSummary(m){
+  const {rows,units,total,normalTotal,qty,uw,disc,save,carry,extraCash}=m;
+  let s;
+  if(!rows.length)s='<div class="rec skip"><b>No items to order.</b><span>Add an item below.</span></div>';
+  else if(!(qty>0))s=`<div class="rec skip"><b>Enter the QD quantity.</b><span>Your normal order for these items is ${countTxt(normalTotal,uw)}. You can also set each quantity yourself below.</span></div>`;
+  else if(total+1e-9<qty)s=`<div class="rec bad"><b>${countTxt(qty-total,uw)} short of the QD.</b><span>You have ${countTxt(total,uw)} of ${countTxt(qty,uw)}. ${rows.some(x=>x.rate>0&&!x.locked)?'':'None of the items you haven’t set have sold recently, so the planner won’t add to them. '}Raise a quantity below to reach the QD.</span></div>`;
+  else if(normalTotal>=qty&&extraCash<=0)s=`<div class="rec good"><b>Your normal order (${countTxt(normalTotal,uw)}) already covers this QD.</b><span>No extra stock needed.${disc?` The discount saves about ${money(save)}.`:''}</span></div>`;
+  else{
+    const maxCover=Math.max(0,...rows.map((x,i)=>x.rate>0&&units[i]>0?(x.pos+units[i])/x.rate:0));
+    const more=total-normalTotal;
+    s=`<div class="rec ${maxCover>120?'bad':'good'}"><b>Order ${countTxt(total,uw)}${more>0?`: ${countTxt(more,uw)} more than your normal order`:''}.</b><span>That’s ${money(extraCash)} of extra stock${disc?`. The discount saves ${money(save)}; carrying the extra stock costs about ${money(carry)}, so you come out ${save-carry>=0?money(save-carry)+' ahead':money(carry-save)+' behind'}`:''}. The longest-lasting item ends up with ${int(maxCover)} days of supply${maxCover>120?', which is a lot to sit on':''}.</span></div>`;
+  }
+  const noCost=rows.filter((x,i)=>units[i]>0&&!x.cost).length;
+  if(noCost&&qty>0)s+=`<p class="hint" style="padding:8px 14px 0">${noCost} item${noCost===1?' has':'s have'} no cost in Advent, so the dollar amounts above are too low.</p>`;
+  return s;
+}
+const stepOf=r=>r.byCase?r.pack:1;
+const daysTxt=(x,u)=>x.rate>0?`${int((x.pos+u)/x.rate)}${(x.pos+u)/x.rate>120?' <span class="chip warn">long</span>':''}`:'—';
+const totalTxt=m=>m.qty>0?`Total ${countTxt(m.total,m.uw)} of ${countTxt(m.qty,m.uw)}`:`Total ${countTxt(m.total,m.uw)}`;
+function renderQuickOut(){
+  const q=S.quick,el=$('#qqOut');if(!el)return;
+  syncMixCtl();
+  const m=quickModel();
+  if(!m){el.innerHTML='<div class="empty">Search for the item the QD is on.</div>';return}
+  const anyManual=Object.keys(q.manual).length>0,onOrder=qdList().length;
+  const body=m.rows.map((x,i)=>{
+    const r=x.r,u=m.units[i],st=stepOf(r),added=q.extra.includes(r.key)&&!m.auto.includes(r.key),rv=q.review[r.key],why=q.why[r.key];
+    return `<tr data-qk="${esc(r.key)}" title="Click for details"${rv?' class="needs-review"':''}><td><div class="nm">${esc(r.it.name)}${added?` <span class="chip acc">added</span> <button class="x" type="button" data-qrm="${esc(r.key)}" aria-label="Remove ${esc(r.it.name)}">×</button>`:''}</div><div class="sub">${esc([r.it.size,r.it.pack,r.it.sku?'#'+r.it.sku:'',r.it.category].filter(Boolean).join(' · '))}</div>${rv?`<div class="why" data-why="${esc(r.key)}"><span>${esc(rv)}</span> <button class="btn small" type="button" data-ok="${esc(r.key)}">Looks right</button></div>`:why?`<div class="why ok">${esc(why)}</div>`:''}</td><td class="r">${dec1(r.perWk)}</td><td class="r">${int(r.onHand)}</td><td class="r">${qtyTxt(r,x.normal)}</td>
+      <td class="r"><div class="stepper${x.locked?' set':''}"><button type="button" data-step="-1" data-k="${esc(r.key)}" aria-label="One less ${r.byCase?'case':'unit'} of ${esc(r.it.name)}">−</button><input type="number" min="0" step="1" inputmode="numeric" data-qv="${esc(r.key)}" value="${u/st}" aria-label="${r.byCase?'Cases':'Units'} of ${esc(quickLabel(r))}"><button type="button" data-step="1" data-k="${esc(r.key)}" aria-label="One more ${r.byCase?'case':'unit'} of ${esc(r.it.name)}">+</button></div><div class="sub" data-qu="${esc(r.key)}">${r.byCase?`cs of ${r.pack} = ${int(u)}`:'units'}</div></td>
+      <td class="r" data-qd="${esc(r.key)}">${daysTxt(x,u)}</td></tr>`;
+  }).join('');
+  el.innerHTML=`<div id="qqSum">${quickSummary(m)}</div><div id="qqNote">${suggestNote()}</div><div class="tablewrap" style="border:0;border-top:1px solid var(--line);border-radius:0"><table class="items plain"><thead><tr><th>Item</th><th class="r">Sells / wk</th><th class="r">On hand</th><th class="r">Normal order</th><th class="r">Order</th><th class="r">Days of supply after</th></tr></thead><tbody>${body}</tbody></table></div>
+    <div class="qf-add"><div class="field"><label for="qqAdd">Add another item to this QD</label><input id="qqAdd" type="search" autocomplete="off" placeholder="e.g. Bacardi Gold 375"></div><div class="results" id="qqAddRes" hidden></div></div>
+    <div class="qq-bar"><div><b id="qqTot">${totalTxt(m)}</b><div class="hint">Change any quantity with − and +; the others adjust to keep the QD total. <button class="btn ghost small" id="qqReset" type="button"${anyManual?'':' hidden'}>Reset to suggestion</button></div></div>
+      <div class="row"><button class="btn small ghost" id="qqSave" type="button">Save as a deal…</button>${q.busy?'<button class="btn" id="qqStop" type="button">Stop</button>':''}<button class="btn" id="qqSuggest" type="button"${q.busy?' disabled':''}>${q.busy?'Suggesting…':'Suggest order'}</button><button class="btn primary" id="qqOrder" type="button">Add to order</button></div></div>
+    ${onOrder?`<div class="qq-onorder">${onOrder} QD${onOrder===1?' is':'s are'} on your order. <button class="btn ghost small" id="qqGo" type="button">View on the Reorder list</button></div>`:''}`;
+  // −/+ and typed quantities only refresh the numbers, so focus and clicks are never lost
+  el.onclick=e=>{
+    const ok=e.target.closest('[data-ok]');if(ok){clearReview(ok.dataset.ok);refreshQuick();return}
+    const b=e.target.closest('[data-step]');
+    if(!b){
+      // anywhere else on a row opens the item's details, same as the Reorder list
+      const tr=e.target.closest('tr[data-qk]');
+      if(tr&&!e.target.closest('button,input,a,label,.stepper'))openDetail(tr.dataset.qk);
+      return;
+    }
+    const k=b.dataset.k,mm=quickModel(),i=mm.rows.findIndex(x=>x.r.key===k);if(i<0)return;
+    const st=stepOf(mm.rows[i].r);q.manual[k]=Math.max(0,mm.units[i]+(+b.dataset.step)*st);clearReview(k);refreshQuick();
+  };
+  $$('[data-qv]',el).forEach(inp=>inp.oninput=()=>{
+    if(inp.value==='')return;
+    const k=inp.dataset.qv,r=S.res.byKey.get(k);q.manual[k]=Math.max(0,Math.round(+inp.value||0))*stepOf(r);clearReview(k);refreshQuick();
+  });
+  $$('[data-qrm]',el).forEach(b=>b.onclick=()=>{const k=b.dataset.qrm;q.extra=q.extra.filter(x=>x!==k);delete q.manual[k];delete q.review[k];renderQuickOut()});
+  bindItemSearch($('#qqAdd'),$('#qqAddRes'),k=>{q.extra.push(k);renderQuickOut();const i=$('#qqAdd');if(i)i.focus()},new Set(m.fam));
+  $('#qqReset').onclick=()=>{q.manual={};q.review={};q.why={};q.note='';renderQuickOut()};
+  $('#qqSuggest').onclick=suggestOrder;
+  if($('#qqStop'))$('#qqStop').onclick=()=>q.busy&&q.busy.abort();
+  $('#qqOrder').onclick=()=>{
+    const mm=quickModel();const items=mm.rows.map((x,i)=>({key:x.r.key,units:mm.units[i]})).filter(i=>i.units>0);
+    if(!items.length){toast('Set at least one quantity first');return}
+    if(pendingReview(mm).length)return;
+    const list=qdList(),i=list.findIndex(o=>o.anchor===q.anchor);
+    const o={id:i>=0?list[i].id:'q'+Date.now().toString(36),name:`${quickLabel(mm.a)} QD`,anchor:q.anchor,qty:mm.qty||0,countIn:q.countIn,disc:mm.disc,items,added:todayDay()};
+    if(i>=0)list[i]=o;else list.push(o);
+    saveQd();refreshOrders();
+    toast(`${i>=0?'Updated':'Added to order'}: ${countTxt(mm.total,mm.uw)} across ${items.length} item${items.length===1?'':'s'}`);
+  };
+  $('#qqSave').onclick=()=>{const mm=quickModel();openDealEditor({preset:{anchor:q.anchor,mixSizes:q.mixSizes,mixFlavors:q.mixFlavors,keys:mm.rows.map(x=>x.r.key),countIn:q.countIn,tiers:[{min:mm.qty||'',amt:mm.disc||'',type:q.countIn==='case'?'case':'unit'}]}})};
+  const go=$('#qqGo');if(go)go.onclick=()=>{goTab('reorder');$('#tabs').scrollIntoView({behavior:'smooth'})};
+  refreshQuick(m);
+}
+const pendingReview=m=>m.rows.filter(x=>S.quick.review[x.r.key]).map(x=>x.r.key);
+function clearReview(k){
+  const q=S.quick;if(!q.review[k])return;
+  delete q.review[k];
+  const tr=$(`#qqOut tr[data-qk="${CSS.escape(k)}"]`);if(tr){tr.classList.remove('needs-review');const w=tr.querySelector('[data-why]');if(w)w.remove()}
+}
+function suggestNote(){
+  const q=S.quick;
+  if(q.busy)return `<p class="hint suggest-note">Claude is checking the suggestion. This can take up to a minute.</p>`;
+  return q.note?`<p class="hint suggest-note">${esc(q.note)}</p>`:'';
+}
+function refreshQuick(m){
+  m=m||quickModel();const el=$('#qqOut');if(!m||!el)return;
+  $('#qqSum').innerHTML=quickSummary(m);
+  $('#qqTot').textContent=totalTxt(m);
+  m.rows.forEach((x,i)=>{
+    const k=x.r.key,u=m.units[i],st=stepOf(x.r),inp=el.querySelector(`[data-qv="${CSS.escape(k)}"]`);
+    if(inp&&document.activeElement!==inp)inp.value=u/st;
+    if(inp)inp.parentElement.classList.toggle('set',!!x.locked);
+    const un=el.querySelector(`[data-qu="${CSS.escape(k)}"]`);if(un&&x.r.byCase)un.textContent=`cs of ${x.r.pack} = ${int(u)}`;
+    const d=el.querySelector(`[data-qd="${CSS.escape(k)}"]`);if(d)d.innerHTML=daysTxt(x,u);
+  });
+  $('#qqReset').hidden=!Object.keys(S.quick.manual).length&&!S.quick.note;
+  const pend=pendingReview(m).length,ob=$('#qqOrder');
+  ob.disabled=!m.units.some(u=>u>0)||pend>0;
+  ob.textContent=pend?`Review ${pend} item${pend===1?'':'s'} first`:qdList().some(o=>o.anchor===S.quick.anchor)?'Update order':'Add to order';
+}
+// the planner's own checks: things a person should look at before ordering
+function ruleFlags(m){
+  const out={};
+  m.rows.forEach((x,i)=>{
+    const r=x.r,u=m.units[i],cover=x.rate>0?(x.pos+u)/x.rate:null;
+    if(r.onHand<0)out[r.key]=`Advent shows ${int(r.onHand)} on hand, so the count is probably wrong and this quantity is a guess.`;
+    else if(x.rate<=0&&r.onHand<=0)out[r.key]='No sales and none on hand. Is this still carried, or is it new?';
+    else if(x.rate<=0)out[r.key]=`No sales in your history, with ${int(r.onHand)} on hand. It gets nothing unless you add some.`;
+    else if(r.flags.includes('new'))out[r.key]='New item with under 4 weeks of sales, so its rate is a rough guess.';
+    else if(cover!=null&&cover>120&&u>0)out[r.key]=`This leaves about ${int(cover)} days of stock.`;
+  });
+  return out;
+}
+async function suggestOrder(){
+  const q=S.quick;
+  q.manual={};q.review={};q.why={};q.note='';
+  const m=quickModel();if(!m)return;
+  const flags=ruleFlags(m);
+  const sample=await samplerP;
+  if(!sample){
+    // without Claude: lock in the planner's split and flag what its checks found
+    m.rows.forEach((x,i)=>{q.manual[x.r.key]=m.units[i]});
+    q.review=flags;
+    const n=Object.keys(flags).length;
+    q.note=n?`Suggested by the planner. ${n} item${n===1?' needs':'s need'} a look before ordering (in red).`:'Suggested by the planner. Nothing looks unusual.';
+    renderQuickOut();return;
+  }
+  const uw=m.uw,T=S.res.ctx.T,mon=new Date(T*DAY).toLocaleDateString('en-US',{month:'long',timeZone:'UTC'});
+  const ids=new Map();
+  const lines=m.rows.map((x,i)=>{
+    const r=x.r,id='i'+(i+1);ids.set(id,x);
+    const unit=r.byCase?`case of ${r.pack}`:'unit',per=q.countIn==='case'?(r.byCase?'1 per case':`1/${r.pack} per unit`):(r.byCase?`${r.pack} per case`:'1 per unit');
+    return `${id} | ${r.it.name} | ${r.it.size||'-'} ${r.it.pack||''} | ${r.it.category} | last 4 wks ${r.w28?dec1(r.w28.r*7):'-'}/wk, last 13 wks ${r.w91?dec1(r.w91.r*7):'-'}/wk | on hand ${int(r.onHand)} | cost $${r.it.cost.toFixed(2)} | order unit: ${unit} | counts toward QD: ${per} | normal order ${x.normal/stepOf(r)} | planner suggests ${m.units[i]/stepOf(r)} (${x.rate>0?int((x.pos+m.units[i])/x.rate)+' days of stock after':'no sales'})${flags[r.key]?' | planner check: '+flags[r.key]:''}`;
+  }).join('\n');
+  const prompt=`You are helping a liquor store owner fill a distributor quantity deal (QD) order.
+
+QD: ${m.qty>0?`buy at least ${m.qty} ${uw}s in total`:'no minimum entered'} across the items below, which the owner picked as "${quickLabel(m.a)}"${q.mixSizes?' with sizes mixing':''}${q.mixFlavors?' with flavours mixing':''}. ${m.disc?`Discount: $${m.disc} per ${uw}.`:''}
+Today is in ${mon}. The planner split the QD so each item lasts about the same number of days, based on recent sales.
+
+Items (id | name | size/pack | department | sales | on hand | cost | order unit | how it counts toward the QD | normal order | planner suggestion):
+${lines}
+
+Your job:
+- Start from the planner's suggestion. Change an item only for a concrete reason a store owner would agree with: the season (e.g. summer flavours in ${mon}), the item looks discontinued or not part of this deal (a different product line, size or type than the rest), or the sales/stock data looks wrong.
+- Quantities are whole order units (cases where the order unit is a case). Keep the total, counted as described, at or above the QD minimum, and don't go far above it.
+- Set review to true for every item you are unsure about or whose data looks off, with one short plain sentence saying what to check. Items with a "planner check" note should be review true unless you are confident the note doesn't matter.
+- Don't invent facts about sales you weren't given.
+
+Reply with only JSON: {"items":[{"id":"i1","qty":2,"review":false,"reason":"short reason, or empty if unchanged"}],"note":"one or two sentences for the owner"}. Include every id.`;
+  const ctl=new AbortController();q.busy=ctl;renderQuickOut();
+  const anchor=q.anchor;
+  try{
+    const out=await sample.json(prompt,{signal:ctl.signal});
+    if(q.busy!==ctl||q.anchor!==anchor)return;   // the quick check moved on while Claude was thinking
+    const got=Array.isArray(out&&out.items)?out.items:[];
+    m.rows.forEach((x,i)=>{q.manual[x.r.key]=m.units[i]});   // planner's split for anything Claude leaves out
+    for(const it of got){
+      const x=ids.get(String(it.id));if(!x)continue;
+      const k=x.r.key,qty=Math.max(0,Math.round(+it.qty));
+      if(isFinite(qty))q.manual[k]=qty*stepOf(x.r);
+      const reason=String(it.reason||'').trim().slice(0,240);
+      if(it.review)q.review[k]=reason||flags[k]||'Claude wasn’t sure about this one.';
+      else if(reason)q.why[k]=reason;
+    }
+    // anything the planner's checks caught and Claude didn't address stays flagged
+    for(const k of Object.keys(flags))if(!q.review[k]&&!q.why[k])q.review[k]=flags[k];
+    const n=Object.keys(q.review).length;
+    q.note=`Suggested by Claude.${out&&out.note?' '+String(out.note).slice(0,400):''}${n?` ${n} item${n===1?' needs':'s need'} your review (in red).`:''}`;
+  }catch(e){
+    if(q.busy!==ctl||q.anchor!==anchor)return;
+    const c=e&&e.code;
+    m.rows.forEach((x,i)=>{q.manual[x.r.key]=m.units[i]});q.review=flags;
+    const why=c==='cancelled'?'Stopped.':c==='not_granted'?'Claude isn’t allowed on this page.':c==='rate_limited'?'Claude is busy right now.':'Claude couldn’t answer.';
+    q.note=`${why} Showing the planner’s suggestion instead${Object.keys(flags).length?'; items in red need a look':''}.`;
+  }
+  q.busy=null;renderQuickOut();
+}
+// QD headings on the Reorder list: Change sends the QD back to the quick check, Remove takes it off the order
+function qdHeadRow(g,cols){
+  const {o,p}=g,uw=o.countIn==='case'?'case':'bottle',cost=p.items.reduce((s,i)=>s+i.units*i.r.it.cost,0);
+  const short=+o.qty>0&&p.total+1e-9<+o.qty;
+  return `<tr class="qd-head"><td colspan="${cols}"><div class="qd-bar"><div><b>${esc(o.name)}</b><span class="sub"> · ${countTxt(p.total,uw)}${+o.qty>0?` (QD ${countTxt(+o.qty,uw)})`:''}${o.disc?` · ${money2(+o.disc)} off per ${uw}`:''} · ${money(cost)} at cost</span>${short?' <span class="chip warn">Short of the QD</span>':''}${p.blockedBy?` <span class="chip warn">Shares items with ${p.blockedBy.map(esc).join(', ')}; not applied</span>`:''}</div>
+    <div class="row"><button class="btn small" type="button" data-qdedit="${esc(o.id)}">Change</button><button class="btn small ghost" type="button" data-qdrm="${esc(o.id)}">Remove</button></div></div></td></tr>`;
+}
+function bindQdButtons(el){
+  $$('[data-qdrm]',el).forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const list=qdList(),i=list.findIndex(o=>o.id===b.dataset.qdrm);if(i<0)return;
+    const name=list[i].name;list.splice(i,1);saveQd();refreshOrders();toast('Removed from order: '+name);
+  });
+  $$('[data-qdedit]',el).forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const o=qdList().find(x=>x.id===b.dataset.qdedit);if(!o)return;
+    const auto=suggestFamily(o.anchor,false,false);
+    Object.assign(S.quick,{anchor:o.anchor,qty:o.qty?String(o.qty):'',countIn:o.countIn,mixSizes:false,mixFlavors:false,sizeSel:null,flavSel:null,disc:o.disc?String(o.disc):'',
+      extra:o.items.map(i=>i.key).filter(k=>!auto.includes(k)),manual:Object.fromEntries(o.items.map(i=>[i.key,i.units])),review:{},why:{},note:''});
+    S.view='deals';renderTabs();renderFilters();renderView();$('#quick').scrollIntoView({behavior:'smooth',block:'start'});
+  });
+}
+function renderDeals(el){
+  const list=dealsList();
+  let h=renderQuickShell();
+  h+=`<div class="deal-top" style="margin:22px 0 10px"><div><div class="label">Saved deals</div><p class="hint" style="max-width:72ch;margin-top:2px">Save a deal to keep it for the month. The planner compares its tiers and, while “Use in suggestions” is on, the Reorder list suggests the deal quantities. Add them to your order from there.</p></div><button class="btn" id="btnNewDeal" type="button">New saved deal</button></div>`;
+  if(!list.length)h+=`<div class="tablewrap"><div class="empty">No saved deals. Use “Save as a deal…” above to keep one.</div></div>`;
+  h+='<div class="sheets">'+list.map(dealCard).join('')+'</div>';
+  el.innerHTML=h;
+  bindQuick();
+  $('#btnNewDeal').onclick=()=>openDealEditor({});
+  $$('[data-edit]',el).forEach(b=>b.onclick=()=>openDealEditor({id:b.dataset.edit}));
+  $$('[data-use]',el).forEach(b=>b.onchange=()=>{const d=dealsList().find(x=>x.id===b.dataset.use);d.use=b.checked;saveDeals();refreshOrders()});
+  $$('[data-del]',el).forEach(b=>b.onclick=()=>{
+    if(b.dataset.armed!=='1'){b.dataset.armed='1';b.textContent='Click again to delete';return}
+    const arr=dealsList(),i=arr.findIndex(x=>x.id===b.dataset.del);if(i>=0)arr.splice(i,1);saveDeals();recompute();toast('Deal deleted');
+  });
+  $$('.sheets tbody tr[data-key]',el).forEach(tr=>tr.onclick=()=>openDetail(tr.dataset.key));
+}
+function dealCard(d){
+  const p=S.res.plans&&S.res.plans.get(d.id),st=dealStatus(d),uw=unitWord(d);
+  const stChip=st==='expired'?'<span class="chip">Expired</span>':st==='upcoming'?`<span class="chip acc">Starts ${fmtDayShort(fromIso(d.from))}</span>`:'<span class="chip ok">Active</span>';
+  const head=`<div class="sheet-head"><div><h3>${esc(d.name)}</h3><div class="sheet-meta"><span>${esc(d.vendor||'')}</span><span>${mixTxt(d)}</span><span>${d.keys.length} item${d.keys.length===1?'':'s'}</span><span>Tiers count ${uw}s</span><span>Up to ${int(d.maxDays)} days of supply</span>${d.to?`<span>Through ${fmtDay(fromIso(d.to))}</span>`:''}${stChip}</div></div>
+    <div class="row"><label class="check"><input type="checkbox" data-use="${esc(d.id)}"${d.use?' checked':''}> Use in suggestions</label><button class="btn small" type="button" data-edit="${esc(d.id)}">Edit</button><button class="btn small ghost" type="button" data-del="${esc(d.id)}">Delete</button></div></div>`;
+  if(!p)return `<section class="sheet">${head}<div class="empty">None of this deal’s items are in the current inventory list.</div></section>`;
+  const b=p.best,normal=p.out[0];
+  let rec;
+  if(b.t.none){
+    const allOver=p.out.length>1&&p.out.slice(1).every(o=>o.overCap);
+    rec=`<div class="rec skip"><b>Skip this deal for now.</b><span>${p.noSales?'None of these items have sold recently, so the planner won’t stock up on them.':allOver?`Even the first tier would leave some items with more than ${int(d.maxDays)} days of supply.`:'The discount doesn’t cover the cost of holding the extra stock.'} Order the normal amount: ${countTxt(normal.total,uw)}.</span></div>`;
+  }else{
+    rec=`<div class="rec good"><b>Buy ${countTxt(b.total,uw)} to get ${offTxt(b.t)}. You save ${money(b.save)}.</b><span>${b.extraCash>0.5?`That’s ${money(b.extraCash)} more stock than your normal order. Carrying it costs about ${money(b.holdCost)}, so you come out ${money(b.net)} ahead.`:'Your normal order already reaches this tier, so the whole discount is savings.'} The longest-lasting item will have ${dosTxt(b.maxCover)} days of supply.</span></div>`;
+  }
+  if(p.blockedBy){
+    const fromQuick=p.blockedBy.some(n=>qdList().some(o=>o.name===n));
+    rec=`<div class="rec bad"><b>Not used in the suggestions.</b><span>It shares items with ${p.blockedBy.map(n=>`“${esc(n)}”`).join(' and ')}, which ${fromQuick?'is already on your order':'is listed first'}. An item can only follow one deal, so ${fromQuick?'remove that from the order':'turn that one off'} or remove the shared items here.</span></div>`+rec;
+  }
+  const tierRows=p.out.map(o=>`<tr class="${o===b?'best':''}"><td>${o.t.none?'Normal order':`${int(o.t.min)}+ ${uw}s · ${offTxt(o.t)}`}</td><td class="r">${countTxt(o.total,uw)}</td><td class="r">${money(o.spend)}</td><td class="r">${money(o.extraCash)}</td><td class="r">${o.t.none?'—':money(o.save)}</td><td class="r">${o.t.none?'—':money(o.holdCost)}</td><td class="r">${o.t.none?'—':(o.net>=0?'':'−')+money(Math.abs(o.net))}</td><td class="r">${dosTxt(o.maxCover)}${o.overCap?`<div><span class="chip warn">${p.noSales?'No sales':'Over limit'}</span></div>`:''}</td></tr>`).join('');
+  const itemRows=b.lines.slice().sort((x,y)=>y.x.rate-x.x.rate).map(l=>{const r=l.x.r;return `<tr data-key="${esc(r.key)}">${itemCell(r)}<td class="r">${dec1(r.perWk)}</td><td class="r">${int(r.onHand)}</td><td class="r">${qtyTxt(r,l.x.base)}</td><td class="r"><b>${qtyTxt(r,l.units)}</b></td><td class="r">${l.x.rate>0?int(l.cover):'—'}</td></tr>`}).join('');
+  return `<section class="sheet">${head}${rec}
+    <div class="tablewrap"><table class="items plain"><thead><tr><th>Option</th><th class="r">Buy</th><th class="r">Spend</th><th class="r">Extra stock</th><th class="r">Savings</th><th class="r">Carrying cost</th><th class="r">Net</th><th class="r">Longest supply (days)</th></tr></thead><tbody>${tierRows}</tbody></table></div>
+    <div class="tablewrap" style="border-top:1px solid var(--line)"><table class="items"><thead><tr><th>Item${b.t.none?'':' (recommended split)'}</th><th class="r">Sells / wk</th><th class="r">On hand</th><th class="r">Normal order</th><th class="r">${b.t.none?'Order':'Deal order'}</th><th class="r">Supply after (days)</th></tr></thead><tbody>${itemRows}</tbody></table></div>
+    ${p.noCost?`<p class="hint" style="padding:8px 14px">${p.noCost} item${p.noCost===1?' has':'s have'} no cost in Advent, so spend and savings are understated.</p>`:''}</section>`;
+}
+function saveDeals(){if(!S.sample)store.set('deals',deals)}
+
+/* ---------- quantity deals: editor ---------- */
+function openDealEditor(init){
+  const existing=init.id?dealsList().find(x=>x.id===init.id):null;
+  const draft=existing?JSON.parse(JSON.stringify(existing)):Object.assign({id:'d'+Date.now().toString(36),name:'',vendor:'',anchor:'',mixSizes:false,mixFlavors:false,keys:[],countIn:'case',tiers:[{min:'',amt:'',type:'case'}],maxDays:90,from:'',to:'',use:true},init.preset||{});
+  let claudeNote='',busy=null;
+  const setAnchor=(k,keepKeys)=>{
+    const r=S.res.byKey.get(k);if(!r)return;
+    draft.anchor=k;draft.vendor=r.it.vendor===NO_DIST?'':r.it.vendor;
+    if(!existing){draft.name=`${r.it.name}${r.it.size?' '+r.it.size:''} QD`;draft.maxDays=BEERISH.test(r.it.category)?30:90}
+    if(!keepKeys)draft.keys=suggestFamily(k,draft.mixSizes,draft.mixFlavors);
+  };
+  if(!existing&&init.preset)setAnchor(draft.anchor,true);
+  else if(!existing&&init.anchor)setAnchor(init.anchor);
+  const search=(q,limit)=>{const s=q.trim().toLowerCase(),c=normCode(q);if(s.length<2)return [];return S.res.results.filter(r=>r.it.name.toLowerCase().includes(s)||(c&&normCode(r.it.sku)===c)||(c&&normCode(r.it.upc)===c)).sort((a,b)=>b.perWk-a.perWk).slice(0,limit)};
+  const label=r=>`${esc(r.it.name)} <span class="sub">${esc([r.it.size,r.it.pack,r.it.category].filter(Boolean).join(' · '))}</span>`;
+  function render(){
+    const prevScroll=$('.drawer')?$('.drawer').scrollTop:0;
+    const a=draft.anchor&&S.res.byKey.get(draft.anchor);
+    // show the selected items plus the rest of the brand family so they are easy to tick
+    let cands=[];
+    if(a){const fam=new Set([...draft.keys,...suggestFamily(draft.anchor,true,true)]);cands=[...fam].map(k=>S.res.byKey.get(k)).filter(Boolean).sort((x,y)=>(draft.keys.includes(y.key)-draft.keys.includes(x.key))||(y.perWk-x.perWk))}
+    const vendors=[...new Set(S.res.results.map(x=>x.it.vendor).filter(v=>v!==NO_DIST))].sort();
+    const d=openPanel(`
+      <div class="drawer-head"><h2>${existing?'Edit quantity deal':'New quantity deal'}</h2><button class="btn ghost" data-close type="button">Cancel</button></div>
+      <div><div class="label" style="margin-bottom:6px">Deal item</div>
+        ${a?`<div class="row" style="justify-content:space-between"><div><div class="nm">${esc(a.it.name)}</div><div class="sub">${esc([a.it.size,a.it.pack,a.it.category,dec1(a.perWk)+'/wk'].filter(Boolean).join(' · '))}</div></div><button class="btn small" id="dqChange" type="button">Change</button></div>`
+          :`<div class="field"><label for="dqAnchor">Search for the item the deal is on</label><input id="dqAnchor" type="search" placeholder="e.g. Hennessy VS" autocomplete="off"></div><div class="results" id="dqAnchorRes" hidden></div>`}
+      </div>
+      ${a?`<div><div class="label" style="margin-bottom:6px">What mixes toward the deal</div>
+        <div class="toggles"><label class="check"><input id="dqSizes" type="checkbox"${draft.mixSizes?' checked':''}> Sizes mix</label><label class="check"><input id="dqFlav" type="checkbox"${draft.mixFlavors?' checked':''}> Flavours mix</label></div>
+        <p class="hint" style="margin-top:6px">${draft.mixSizes&&draft.mixFlavors?'Every size and flavour of the brand counts.':draft.mixSizes?'Every size of this product counts.':draft.mixFlavors?'Other flavours of the brand in this size count.':'Only this exact item counts.'} Check the list below. Names in Advent aren’t always consistent, so tick or untick anything the guess got wrong.</p>
+        <div class="cand" style="margin-top:8px">${cands.map(r=>`<label><input type="checkbox" data-k="${esc(r.key)}"${draft.keys.includes(r.key)?' checked':''}><span>${label(r)}</span><small>${dec1(r.perWk)}/wk · ${int(r.onHand)} on hand</small></label>`).join('')}</div>
+        <div class="field" style="margin-top:8px"><label for="dqAdd">Add another item</label><input id="dqAdd" type="search" placeholder="Search any item" autocomplete="off"></div><div class="results" id="dqAddRes" hidden></div>
+      </div>
+      <div class="claude-box" id="dqClaude" hidden>
+        <div class="label">Ask Claude</div>
+        <p class="hint">Claude can sort out which items belong to this deal when names are messy, and read the tiers from the deal wording if you paste it. This sends the deal wording and the names of the items listed above to Claude.</p>
+        <label class="hint" for="dqText">Deal wording from the distributor (optional)</label>
+        <textarea id="dqText" placeholder="e.g. Hennessy VS/VSOP all sizes mix. 5 cs $12/cs, 10 cs $20/cs. Valid Nov 1–30.">${esc(draft._text||'')}</textarea>
+        <div class="row"><button class="btn" id="dqAsk" type="button">${busy?'Asking Claude…':'Check items and tiers with Claude'}</button>${busy?'<button class="btn ghost" id="dqStop" type="button">Stop</button>':''}</div>
+        ${claudeNote?`<p class="hint" style="color:var(--ink-2)">${esc(claudeNote)}</p>`:''}
+      </div>
+      <div><div class="label" style="margin-bottom:6px">Deal tiers</div>
+        <div class="field" style="max-width:260px;margin-bottom:8px"><label for="dqCount">Tier quantities count</label><select id="dqCount"><option value="case"${draft.countIn==='case'?' selected':''}>Cases (any size counts as 1)</option><option value="unit"${draft.countIn==='unit'?' selected':''}>Bottles / units</option></select></div>
+        <div class="tiers">${draft.tiers.map((t,i)=>`<div class="tier">
+          <div class="field"><label for="tm${i}">Buy at least (${unitWord(draft)}s)</label><input id="tm${i}" data-t="${i}" data-tf="min" type="number" min="0" step="1" value="${t.min}"></div>
+          <div class="field"><label for="ta${i}">Discount</label><input id="ta${i}" data-t="${i}" data-tf="amt" type="number" min="0" step="0.01" value="${t.amt}"></div>
+          <div class="field"><label for="tt${i}">Applies</label><select id="tt${i}" data-t="${i}" data-tf="type"><option value="case"${t.type==='case'?' selected':''}>$ off per case</option><option value="unit"${t.type==='unit'?' selected':''}>$ off per bottle</option><option value="pct"${t.type==='pct'?' selected':''}>% off cost</option></select></div>
+          <button class="x" type="button" data-trm="${i}" aria-label="Remove tier">×</button></div>`).join('')}</div>
+        <button class="btn small" id="dqAddTier" type="button" style="margin-top:8px">Add tier</button>
+      </div>
+      <div class="settings-grid">
+        <div class="field"><label for="dqMax">Don’t buy more than (days of supply)</label><input id="dqMax" type="number" min="7" step="1" value="${draft.maxDays}"></div>
+        <div class="field"><label for="dqFrom">Deal starts</label><input id="dqFrom" type="date" value="${draft.from||''}"></div>
+        <div class="field"><label for="dqTo">Deal ends</label><input id="dqTo" type="date" value="${draft.to||''}"></div>
+      </div>
+      <div class="settings-grid">
+        <div class="field"><label for="dqName">Deal name</label><input id="dqName" value="${esc(draft.name)}"></div>
+        <div class="field"><label for="dqVendor">Distributor</label><input id="dqVendor" list="dqVendList" value="${esc(draft.vendor)}"><datalist id="dqVendList">${vendors.map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+      </div>`:''}
+      <div class="err" id="dqErr" role="alert"></div>
+      <div class="row"><button class="btn primary" id="dqSave" type="button"${a?'':' disabled'}>Save deal</button><button class="btn ghost" data-close type="button">Cancel</button></div>
+    `);
+    d.scrollTop=prevScroll;
+    $('#dqSave').onclick=save;
+    const pickList=(inputId,resId,onPick)=>{
+      const inp=$('#'+inputId),box=$('#'+resId);if(!inp)return;
+      inp.oninput=()=>{const rs=search(inp.value,8);box.hidden=!rs.length;box.innerHTML=rs.map(r=>`<button type="button" data-pk="${esc(r.key)}">${label(r)} <span class="sub">${dec1(r.perWk)}/wk</span></button>`).join('');$$('[data-pk]',box).forEach(b=>b.onclick=()=>onPick(b.dataset.pk))};
+    };
+    pickList('dqAnchor','dqAnchorRes',k=>{setAnchor(k);render()});
+    if($('#dqAnchor'))$('#dqAnchor').focus();
+    if(!a)return;
+    $('#dqChange').onclick=()=>{draft.anchor='';render()};
+    $('#dqSizes').onchange=e=>{draft.mixSizes=e.target.checked;draft.keys=suggestFamily(draft.anchor,draft.mixSizes,draft.mixFlavors);render()};
+    $('#dqFlav').onchange=e=>{draft.mixFlavors=e.target.checked;draft.keys=suggestFamily(draft.anchor,draft.mixSizes,draft.mixFlavors);render()};
+    $$('[data-k]',d).forEach(c=>c.onchange=()=>{const k=c.dataset.k;draft.keys=draft.keys.filter(x=>x!==k);if(c.checked)draft.keys.push(k)});
+    pickList('dqAdd','dqAddRes',k=>{if(!draft.keys.includes(k))draft.keys.push(k);render()});
+    $$('[data-tf]',d).forEach(i=>i.onchange=()=>{const t=draft.tiers[+i.dataset.t];t[i.dataset.tf]=i.dataset.tf==='type'?i.value:(i.value===''?'':+i.value)});
+    $$('[data-trm]',d).forEach(b=>b.onclick=()=>{draft.tiers.splice(+b.dataset.trm,1);if(!draft.tiers.length)draft.tiers.push({min:'',amt:'',type:'case'});render()});
+    $('#dqAddTier').onclick=()=>{const last=draft.tiers[draft.tiers.length-1];draft.tiers.push({min:'',amt:'',type:last?last.type:'case'});render()};
+    $('#dqCount').onchange=e=>{draft.countIn=e.target.value;render()};
+    $('#dqMax').onchange=e=>{draft.maxDays=Math.max(7,+e.target.value||90)};
+    $('#dqFrom').onchange=e=>{draft.from=e.target.value};$('#dqTo').onchange=e=>{draft.to=e.target.value};
+    $('#dqName').onchange=e=>{draft.name=e.target.value};$('#dqVendor').onchange=e=>{draft.vendor=e.target.value.trim()};
+    $('#dqText').onchange=e=>{draft._text=e.target.value};
+    samplerP.then(s=>{const box=$('#dqClaude');if(s&&box)box.hidden=false});
+    $('#dqAsk').onclick=()=>{if(!busy){draft._text=$('#dqText').value;askClaude()}};
+    if($('#dqStop'))$('#dqStop').onclick=()=>busy&&busy.abort();
+  }
+  async function askClaude(){
+    const sample=await samplerP;if(!sample)return;
+    const a=S.res.byKey.get(draft.anchor),abr=brandOf(a.it.name);
+    const cands=S.res.results.filter(r=>brandOf(r.it.name)===abr||draft.keys.includes(r.key)).sort((x,y)=>y.perWk-x.perWk).slice(0,250);
+    const ids=new Map();
+    const lines=cands.map((r,i)=>{const id='i'+(i+1);ids.set(id,r.key);return `${id} | ${r.it.name} | ${r.it.size||'-'} | ${r.it.pack||'-'} | ${r.it.category} | ${dec1(r.perWk)}/wk${draft.keys.includes(r.key)?' | currently selected':''}`}).join('\n');
+    const prompt=`You are helping a liquor store owner set up a distributor quantity discount (QD) in their reorder tool.
+
+Deal item: "${a.it.name}" size ${a.it.size||'unknown'}, pack ${a.it.pack||'unknown'}, department ${a.it.category}.
+The owner's mix rules: sizes mix = ${draft.mixSizes?'yes':'no'}; flavours mix = ${draft.mixFlavors?'yes':'no'}.
+- "Sizes mix" means the same product in other sizes counts toward the deal (e.g. Hennessy VS 375ml, 750ml, 1.75L).
+- "Flavours mix" means other expressions or flavours of the same brand count (e.g. Hennessy VSOP and XO alongside VS), in the same size unless sizes also mix.
+- If neither, only the deal item itself counts.
+
+Deal wording from the distributor (may be empty; if it names which items or sizes qualify, follow it over the mix rules):
+"""
+${(draft._text||'').slice(0,4000)}
+"""
+
+Store items that might belong (id | name | size | pack | department | sales per week):
+${lines}
+
+Item names were typed by hand and are inconsistent: "Titos Handmade" and "Tito's Handmade Vodka" are the same product, the size is sometimes only in the name ("Hennessy COGN VS FL 375 ML"), and a bare brand name such as "Hennessy" with a size usually means the base expression (VS). Leave out ready-to-drink cans, gift sets and different product types unless the wording includes them.
+
+Reply with only JSON in this shape:
+{"include":["i1","i4"],"tiers":[{"min":5,"amount":12,"type":"case"}],"countIn":"case","from":"YYYY-MM-DD or empty","to":"YYYY-MM-DD or empty","note":"one or two plain sentences on anything the owner should double-check"}
+"type" is "case" for dollars off per case, "unit" for dollars off per bottle, "pct" for percent off. Only fill tiers, countIn and dates from the deal wording; leave tiers empty and countIn null if the wording doesn't state them.`;
+    busy=new AbortController();claudeNote='Claude is reading the list. This can take up to a minute.';render();
+    try{
+      const out=await sample.json(prompt,{signal:busy.signal});
+      const inc=Array.isArray(out&&out.include)?out.include.map(x=>ids.get(String(x))).filter(Boolean):null;
+      if(inc&&inc.length){if(!inc.includes(draft.anchor))inc.unshift(draft.anchor);draft.keys=inc}
+      const tiers=Array.isArray(out&&out.tiers)?out.tiers.filter(t=>+t.min>0&&+t.amount>0).map(t=>({min:+t.min,amt:+t.amount,type:['case','unit','pct'].includes(t.type)?t.type:'case'})):[];
+      if(tiers.length)draft.tiers=tiers;
+      if(out&&(out.countIn==='case'||out.countIn==='unit'))draft.countIn=out.countIn;
+      if(out&&fromIso(out.from)!=null)draft.from=out.from;
+      if(out&&fromIso(out.to)!=null)draft.to=out.to;
+      claudeNote=(inc&&inc.length?`Claude picked ${inc.length} item${inc.length===1?'':'s'}${tiers.length?` and ${tiers.length} tier${tiers.length===1?'':'s'}`:''}. `:'')+(out&&out.note?String(out.note):'')||'Claude didn’t change anything.';
+    }catch(e){
+      const c=e&&e.code;
+      claudeNote=c==='cancelled'?'Stopped.':c==='not_granted'?'Claude isn’t allowed on this page. You can allow it from the page’s permissions.':c==='rate_limited'?'Too many requests right now. Try again in a minute.':c==='invalid_json'?'Claude’s answer couldn’t be read. Try again.':'Claude couldn’t answer right now. Try again later.';
+    }
+    busy=null;render();
+  }
+  function save(){
+    const err=$('#dqErr');
+    if(!draft.anchor||!draft.keys.length){err.textContent='Pick the deal item and at least one item that counts toward it.';return}
+    draft.tiers=draft.tiers.filter(t=>+t.min>0&&+t.amt>0);
+    if(!draft.tiers.length){draft.tiers.push({min:'',amt:'',type:'case'});render();$('#dqErr').textContent='Enter at least one tier with a quantity and a discount.';return}
+    if(!draft.name.trim())draft.name='Quantity deal';
+    delete draft._text;
+    const arr=dealsList(),i=arr.findIndex(x=>x.id===draft.id);
+    if(i>=0)arr[i]=draft;else arr.push(draft);
+    saveDeals();
+    closePanel();recompute();S.view='deals';renderTabs();renderFilters();renderView();
+    toast(S.sample?'Saved for this visit. Sample deals aren’t kept.':'Deal saved');
+  }
+  render();
+}
+
+/* ---------- drawers ---------- */
+function openPanel(html){
+  const o=$('#overlay');o.hidden=false;
+  o.innerHTML=`<div class="scrim" data-close></div><aside class="drawer" role="dialog" aria-modal="true">${html}</aside>`;
+  $$('[data-close]',o).forEach(b=>b.onclick=closePanel);
+  return $('.drawer',o);
+}
+function closePanel(){const o=$('#overlay');o.hidden=true;o.innerHTML=''}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#overlay').hidden)closePanel()});
+
+function openDetail(key){
+  const r=S.res&&S.res.byKey.get(key);if(!r)return;
+  const it=r.it,ov=getOv(key),T=S.res.ctx.T;
+  const rateLine=[r.w28&&`28 days: ${dec1(r.w28.r*7)}/wk`,r.w91&&`91 days: ${dec1(r.w91.r*7)}/wk`,!r.seasonal&&r.w365&&`365 days: ${dec1(r.w365.r*7)}/wk`].filter(Boolean).join(' · ');
+  const runOut=isFinite(r.dos)&&r.base>0?fmtDay(T+Math.floor(r.dos)):'—';
+  const orderTxt=r.units?(r.byCase?`${r.cases} case${r.cases===1?'':'s'} × ${r.pack} = ${int(r.units)} units`:`${int(r.units)} units`):(r.held?'Not reordering (your setting)':r.base<=0?'No recent sales':'Nothing needed');
+  const d=openPanel(`
+    <div class="drawer-head"><div><h2>${esc(it.name)}</h2><div class="sub">${esc([it.size,it.sku&&'#'+it.sku,it.upc&&'UPC '+it.upc].filter(Boolean).join(' · '))}</div></div><button class="btn ghost" data-close type="button">Close</button></div>
+    <div class="row"><span class="abc ${r.cls}">${r.cls}</span><span class="hint">${esc(it.vendor)} · ${esc(it.category)}</span>${chips(r)}</div>
+    <div class="facts">
+      <div class="fact"><div class="k">On hand</div><div class="v">${int(r.onHand)}</div></div>
+      <div class="fact"><div class="k">Sells / week</div><div class="v">${dec1(r.perWk)}</div></div>
+      <div class="fact"><div class="k">Runs out</div><div class="v">${runOut}</div></div>
+      <div class="fact"><div class="k">Next 30 / 60 / 90</div><div class="v">${int(r.f30)} / ${int(r.f60)} / ${int(r.f90)}</div></div>
+    </div>
+    <div class="row order-row">${r.ord>0?`<span class="on-order">✓ ${qtyShort(r,r.ord)} on your order${r.qdId?' (in a QD)':''}</span><button class="btn small ghost" id="dOff" type="button">Take off the order</button>`:r.held?'<span class="hint">Not reordering (your setting)</span>':`<button class="btn primary" id="dAdd" type="button">Add ${qtyShort(r,r.units>0?r.units:stepOf(r))} to your order</button>${r.units>0?'<span class="hint">the suggested amount; change it on the order sheet</span>':''}`}</div>
+    <div><div class="legend"><span><i class="sw" style="background:var(--bar)"></i>Sold per week</span><span><i class="sw" style="background:var(--bar-fore)"></i>Forecast</span><span><i class="sw" style="background:repeating-linear-gradient(45deg,var(--crit) 0 1.5px,var(--crit-soft) 1.5px 4px)"></i>Out of stock, ignored</span></div>
+    <div class="chart" id="chart"></div></div>
+    <div><div class="label" style="margin-bottom:6px">How the order was worked out</div>
+    <div class="math">
+      <div class="mk">Selling rate<small>${rateLine||'not enough sales history'}${r.adj?` · your adjustment ${r.adj>0?'+':''}${r.adj}%`:''}</small></div><div class="mv">${dec1(r.base*7)}/wk</div>
+      ${r.seasonal?`<div class="mk">Season factor, next 30 days<small>${esc(it.category)} sales this time last year vs. the weeks before</small></div><div class="mv">×${r.s30.toFixed(2)}</div>`:''}
+      ${r.excDays?`<div class="mk">Out-of-stock days ignored<small>${r.ranges.slice(-3).map(x=>fmtDayShort(x[0])+' – '+fmtDayShort(x[1])).join(', ')}</small></div><div class="mv">${int(r.excDays)} days</div>`:''}
+      <div class="mk">Expected sales until the next delivery after this one<small>${r.L} day lead time + ${r.R} day order cycle</small></div><div class="mv">${dec1(r.demandP)}</div>
+      <div class="mk">Safety stock<small>${r.svc}% in-stock target for ${r.cls} items</small></div><div class="mv">+ ${dec1(r.ss)}</div>
+      <div class="mk">Target stock</div><div class="mv">${dec1(r.target)}</div>
+      <div class="mk">On hand${r.onOrder?' + on order':''}${r.onHand<0?'<small>Negative count treated as 0</small>':''}</div><div class="mv">− ${int(r.position)}</div>
+      <div class="mk total">Suggested order${r.byCase&&r.units?`<small>Rounded to full cases of ${r.pack}${r.packSrc==='est'?' (estimated from the bottle size; set the real number below)':''}</small>`:''}</div><div class="mv total">${orderTxt}</div>
+    </div></div>
+    <div><div class="label" style="margin-bottom:6px">Your adjustments</div>
+    <div class="controls">
+      <div class="field"><label for="ovOrder">Already on order (units)</label><input id="ovOrder" type="number" min="0" step="1" value="${ov.onOrder??''}" placeholder="${it.onOrder||0}"></div>
+      <div class="field"><label for="ovAdj">Expected demand change (%)</label><input id="ovAdj" type="number" step="5" value="${ov.adj||''}" placeholder="0"></div>
+      <div class="field"><label for="ovPack">Units per case</label><input id="ovPack" type="number" min="1" step="1" value="${ov.pack??''}" placeholder="${r.pack}${r.packSrc==='est'?' (estimate)':''}"></div>
+      <div class="field"><label for="ovVendor">Distributor for this item</label><input id="ovVendor" list="vendList" value="${esc(ov.vendor||'')}" placeholder="${esc(it.vendor)}"><datalist id="vendList">${[...new Set(S.res.results.map(x=>x.it.vendor).filter(v=>v!==NO_DIST))].sort().map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+      <label class="check"><input id="ovHold" type="checkbox"${ov.noReorder?' checked':''}> Don’t reorder (allocated or discontinued)</label>
+    </div><p class="hint" style="margin-top:6px">Saved in this browser. Use the demand change for things the history can’t know, such as a nearby bar closing or a local event.</p></div>
+    <div class="row" style="justify-content:space-between;border-top:1px solid var(--line);padding-top:12px">
+      <span class="hint">${(()=>{const ds=[...qdList().map(o=>({name:o.name+' (on your order)',keys:o.items.map(i=>i.key)})),...dealsList()].filter(x=>x.keys.includes(key));return ds.length?'In '+ds.map(x=>esc(x.name)).join(', '):'Distributor running a quantity deal on this item?'})()}</span>
+      <button class="btn" id="ovDeal" type="button">Check a QD on this item</button>
+    </div>
+  `);
+  drawChart($('#chart',d),r);
+  if($('#dAdd'))$('#dAdd').onclick=()=>{setOrder(key,r.units>0?r.units:stepOf(r));toast(`Added ${it.name} to your order`);openDetail(key)};
+  if($('#dOff'))$('#dOff').onclick=()=>{setOrder(key,0);toast(`Took ${it.name} off your order`);openDetail(key)};
+  const upd=()=>{
+    const o=Object.assign({},overrides[key]||{});
+    const oo=$('#ovOrder').value,ad=$('#ovAdj').value;
+    if(oo==='')delete o.onOrder;else o.onOrder=Math.max(0,+oo);
+    if(ad===''||+ad===0)delete o.adj;else o.adj=+ad;
+    const pk=$('#ovPack').value,vd=$('#ovVendor').value.trim();
+    if(pk===''||!(+pk>0))delete o.pack;else o.pack=Math.round(+pk);
+    if(vd)o.vendor=vd;else delete o.vendor;
+    o.noReorder=$('#ovHold').checked;
+    overrides[key]=o;store.set('overrides',overrides);
+    recompute();openDetail(key);
+  };
+  $('#ovDeal').onclick=()=>{
+    Object.assign(S.quick,{anchor:key,qty:'',extra:[],manual:{},review:{},why:{},note:''});closePanel();
+    S.view='deals';renderTabs();renderFilters();renderView();
+    $('#quick').scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>$('#qqQty')&&$('#qqQty').focus(),300);
+  };
+  $('#ovOrder').onchange=upd;$('#ovAdj').onchange=upd;$('#ovHold').onchange=upd;$('#ovPack').onchange=upd;$('#ovVendor').onchange=upd;
+}
+
+function drawChart(el,r){
+  const T=S.res.ctx.T,ctx=S.res.ctx;
+  const bars=[];
+  for(let k=51;k>=0;k--){
+    const b=T-7*k,a=b-7;let s=0,ex=0,have=0;
+    for(let d=a;d<b;d++){const i=d-r.start;if(i<0||i>=r.n)continue;have++;s+=r.arr[i];if(r.exc[i])ex++}
+    bars.push({a,v:have?s:null,oos:ex>=3,ex});
+  }
+  for(let w=0;w<13;w++){
+    const f=r.seasonal?ctx.season(r.it.category,Math.max(0,w*7-3),14):1;
+    bars.push({a:T+7*w,v:r.held?0:r.base*f*7,fc:true});
+  }
+  const W=640,H=210,m={l:34,r:6,t:16,b:24},pw=W-m.l-m.r,ph=H-m.t-m.b;
+  const max=Math.max(1,...bars.map(b=>b.v||0));
+  const step=(()=>{const raw=max/4,p=Math.pow(10,Math.floor(Math.log10(raw))),n=raw/p;return(n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*p})();
+  const top=Math.ceil(max/step)*step;
+  const y=v=>m.t+ph-(v/top)*ph,bw=pw/bars.length;
+  let g=`<defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" style="fill:var(--crit-soft)"/><line x1="0" y1="0" x2="0" y2="5" style="stroke:var(--crit);stroke-width:1.5"/></pattern></defs>`;
+  for(let v=0;v<=top+1e-9;v+=step){g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--line);stroke-width:1"/><text x="${m.l-6}" y="${y(v)+3}" text-anchor="end">${v>=10?int(v):+v.toFixed(1)}</text>`}
+  let lastLbl=-99;
+  bars.forEach((b,i)=>{
+    const x=m.l+i*bw;
+    if(b.oos)g+=`<rect x="${x}" y="${m.t}" width="${bw}" height="${ph}" fill="url(#hatch)" opacity=".55"/>`;
+    if(b.v){const h=Math.max(1,ph*(b.v/top));g+=`<rect x="${x+1}" y="${m.t+ph-h}" width="${Math.max(1.5,bw-2)}" height="${h}" rx="1.5" style="fill:${b.fc?'var(--bar-fore)':'var(--bar)'}"/>`}
+    const p=dParts(b.a),pp=dParts(b.a-7);
+    if((i===0||p.m!==pp.m)&&x-lastLbl>=46){g+=`<text x="${x+1}" y="${H-8}">${new Date(b.a*DAY).toLocaleDateString('en-US',{month:'short',timeZone:'UTC'})}${p.m===1||i===0?' ’'+String(p.y).slice(2):''}</text>`;lastLbl=x}
+  });
+  const tx=m.l+52*bw;
+  g+=`<line x1="${tx}" x2="${tx}" y1="${m.t-6}" y2="${m.t+ph}" style="stroke:var(--ink-2);stroke-width:1;stroke-dasharray:3 3"/><text x="${tx+4}" y="${m.t-6}" style="fill:var(--ink-2)">Today</text>`;
+  g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${m.t+ph}" y2="${m.t+ph}" style="stroke:var(--muted);stroke-width:1"/>`;
+  bars.forEach((b,i)=>{g+=`<rect class="hit" data-i="${i}" x="${m.l+i*bw}" y="${m.t}" width="${bw}" height="${ph}" fill="transparent"/>`});
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Weekly sales for the last 52 weeks and forecast for the next 13">${g}</svg><div class="tip" hidden></div>`;
+  const tip=$('.tip',el),svg=$('svg',el);
+  svg.addEventListener('mousemove',e=>{
+    const t=e.target.closest('.hit');if(!t){tip.hidden=true;return}
+    const b=bars[+t.dataset.i];
+    tip.textContent=b.fc?`Forecast, week of ${fmtDayShort(b.a)}: about ${dec1(b.v)}`:b.v==null?`Week of ${fmtDayShort(b.a)}: no history yet`:`Week of ${fmtDayShort(b.a)}: ${dec1(b.v)} sold${b.ex?`, out of stock ${b.ex} of 7 days`:''}`;
+    const rc=el.getBoundingClientRect(),tr=t.getBoundingClientRect();
+    tip.hidden=false;tip.style.left=Math.min(rc.width-90,Math.max(90,tr.left-rc.left+tr.width/2))+'px';tip.style.top=(tr.top-rc.top+6)+'px';
+  });
+  svg.addEventListener('mouseleave',()=>tip.hidden=true);
+}
+
+function openSettings(){
+  const depts=S.res?[...S.res.allDepts.entries()].sort((a,b)=>a[0].localeCompare(b[0])):[];
+  const fileHasVendor=S.inv&&S.inv.items.some(x=>x.vendor);
+  const d=openPanel(`
+    <div class="drawer-head"><h2>Settings</h2><button class="btn ghost" data-close type="button">Done</button></div>
+    <div><div class="label" style="margin-bottom:8px">Departments</div>
+    <p class="hint" style="margin-bottom:8px">${fileHasVendor?'Your inventory list names a distributor for each item. Use this only to fill gaps.':'Your inventory list has no distributor column, so pick who supplies each department. Items a different distributor carries can be changed one by one from the item panel.'} Untick departments that aren’t stock you reorder, like fees.</p>
+    <datalist id="deptVendList"></datalist>
+    <div class="tablewrap"><table class="vend"><thead><tr><th>Department</th><th>Items</th><th>Distributor</th><th>Plan</th></tr></thead><tbody>
+    ${depts.map(([dn,n],i)=>{const c=deptOf(dn);return `<tr><td>${esc(dn)}</td><td class="mono">${int(n)}</td><td><input id="dv${i}" data-d="${i}" list="deptVendList" value="${esc(c.vendor)}" placeholder="${fileHasVendor?'from file':'Type a distributor'}" aria-label="Distributor for ${esc(dn)}" style="max-width:none"></td><td><input id="dk${i}" data-dk="${i}" type="checkbox"${c.skip?'':' checked'} aria-label="Include ${esc(dn)} in planning" style="width:16px;height:16px"></td></tr>`}).join('')}
+    </tbody></table></div></div>
+    <div><div class="label" style="margin-bottom:8px">Distributors</div>
+    <p class="hint" style="margin-bottom:8px">Lead time is days from placing an order to having it on the shelf. Order cycle is how often you order from them. Together they set how much stock each order has to cover.</p>
+    <div id="vendTable"></div></div>
+    <div><div class="label" style="margin-bottom:8px">In-stock targets</div>
+    <p class="hint" style="margin-bottom:8px">Items are ranked by sales dollars over the last year. A items are the top 80% of sales, B the next 15%, C the rest. A higher target carries more safety stock.</p>
+    <div class="settings-grid">
+      <div class="field"><label for="sA">A items (%)</label><input id="sA" data-s="svcA" type="number" min="50" max="99.9" step="0.5" value="${settings.svcA}"></div>
+      <div class="field"><label for="sB">B items (%)</label><input id="sB" data-s="svcB" type="number" min="50" max="99.9" step="0.5" value="${settings.svcB}"></div>
+      <div class="field"><label for="sC">C items (%)</label><input id="sC" data-s="svcC" type="number" min="50" max="99.9" step="0.5" value="${settings.svcC}"></div>
+    </div></div>
+    <div><div class="label" style="margin-bottom:8px">Ordering and flags</div>
+    <div class="settings-grid">
+      <div class="field"><label for="sRound">Round up a partial case at (% of a case)</label><input id="sRound" data-s="roundUp" type="number" min="0" max="100" step="5" value="${settings.roundUp}"></div>
+      <div class="field"><label for="sPack">Units per case if the file has none</label><input id="sPack" data-s="defaultPack" type="number" min="1" step="1" value="${settings.defaultPack}"></div>
+      <div class="field"><label for="sOver">Overstock after (days of supply)</label><input id="sOver" data-s="overstockDays" type="number" min="14" step="1" value="${settings.overstockDays}"></div>
+      <div class="field"><label for="sDead">Dead stock after (days without a sale)</label><input id="sDead" data-s="deadDays" type="number" min="14" step="1" value="${settings.deadDays}"></div>
+      <div class="field"><label for="sHold">Cost of holding stock (% per year)</label><input id="sHold" data-s="holdRate" type="number" min="0" max="100" step="1" value="${settings.holdRate}"></div>
+    </div>
+    <label class="check" style="margin-top:10px"><input id="sSeason" type="checkbox"${settings.useSeason?' checked':''}> Adjust for seasons using last year’s sales (needs about 15 months of history)</label>
+    <label class="check" style="margin-top:6px"><input id="sEst" type="checkbox"${settings.estPack?' checked':''}> Estimate case size from bottle size and pack when the file has none (750ml = 12, 1.75L = 6, beer 6pk = 4, 12pk = 2…)</label></div>
+    <div class="row"><button class="btn" id="sReset" type="button">Reset all settings and item adjustments</button><span class="hint" id="sResetMsg"></span></div>
+  `);
+  let tm;const later=()=>{clearTimeout(tm);tm=setTimeout(()=>{recompute()},250)};
+  $$('input[data-s]',d).forEach(i=>i.oninput=()=>{const v=+i.value;if(i.value!==''&&isFinite(v)){settings[i.dataset.s]=v;store.set('settings',settings);later()}});
+  $('#sSeason').onchange=e=>{settings.useSeason=e.target.checked;store.set('settings',settings);later()};
+  $('#sEst').onchange=e=>{settings.estPack=e.target.checked;store.set('settings',settings);later()};
+  const renderVend=()=>{
+    const vs=S.res?[...new Set(S.res.results.map(x=>x.it.vendor))].sort():[];
+    $('#deptVendList').innerHTML=vs.filter(v=>v!==NO_DIST).map(v=>`<option value="${esc(v)}">`).join('');
+    $('#vendTable').innerHTML=`<div class="tablewrap"><table class="vend"><thead><tr><th>Distributor</th><th>Lead time (days)</th><th>Order every (days)</th><th>Minimum $</th><th>Order by</th></tr></thead><tbody>
+    ${vs.map((v,i)=>{const c=vendorOf(v);return `<tr><td>${esc(v)}</td><td><input id="vl${i}" data-v="${i}" data-f="lead" type="number" min="0" value="${c.lead}" aria-label="Lead time for ${esc(v)}"></td><td><input id="vc${i}" data-v="${i}" data-f="cycle" type="number" min="1" value="${c.cycle}" aria-label="Order cycle for ${esc(v)}"></td><td><input id="vm${i}" data-v="${i}" data-f="min" type="number" min="0" value="${c.min}" aria-label="Minimum order for ${esc(v)}"></td><td><select id="vb${i}" data-v="${i}" data-f="by" aria-label="Order unit for ${esc(v)}"><option value="case"${c.by==='case'?' selected':''}>Full cases</option><option value="unit"${c.by==='unit'?' selected':''}>Single units</option></select></td></tr>`}).join('')}
+    </tbody></table></div>`;
+    $$('[data-v]',d).forEach(i=>{const h=()=>{const v=vs[+i.dataset.v];const c=Object.assign({},vendorCfg[v]||{});c[i.dataset.f]=i.dataset.f==='by'?i.value:Math.max(0,+i.value||0);vendorCfg[v]=c;store.set('vendors',vendorCfg);later()};i.oninput=h;i.onchange=h});
+  };
+  renderVend();
+  const setDept=(i,patch)=>{const dn=depts[i][0];deptCfg[dn]=Object.assign({},deptCfg[dn]||{},patch);store.set('depts',deptCfg);clearTimeout(tm);recompute();renderVend()};
+  $$('[data-d]',d).forEach(i=>i.onchange=()=>setDept(+i.dataset.d,{vendor:i.value.trim()}));
+  $$('[data-dk]',d).forEach(i=>i.onchange=()=>setDept(+i.dataset.dk,{skip:!i.checked}));
+  let armed=false;
+  $('#sReset').onclick=()=>{
+    if(!armed){armed=true;$('#sReset').textContent='Click again to reset';$('#sResetMsg').textContent='This clears distributor settings and every item adjustment.';return}
+    settings=Object.assign({},DEFAULTS);vendorCfg={};overrides={};deptCfg={};
+    store.set('settings',settings);store.set('vendors',vendorCfg);store.set('overrides',overrides);store.set('depts',deptCfg);
+    recompute();openSettings();toast('Settings reset');
+  };
+}
+
+function howHtml(){
+  return `<div class="prose">
+  <section><h3>What to export from Advent</h3>
+    <p><b>Inventory:</b> the <i>Item List Report</i>, exported fresh each time you plan an order. It has on-hand counts, cost, size and department.</p>
+    <p><b>Sales:</b> the <i>Departmentwise Item Sales</i> report, one export per week (for example Monday to Sunday), going back two years. Each file is a total per item with no dates inside, so the planner asks which week each file covers. Put the dates in the file name, like <span class="mono">sales 2025-10-06 to 2025-10-12.csv</span>, and they fill in on their own. Or use “Fill down as weekly” after entering the first week.</p>
+    <p>Don’t also load the <i>Hourly Item Sales</i> report for the same week. It holds the same sales and would count them twice.</p>
+    <p>Loaded files stay in this browser, so after the first big load you only add the newest week plus a fresh Item List.</p></section>
+  <section><h3>Selling rate</h3>
+    <p>Each item’s rate blends its last 28 days, last 91 days and (without seasonal data) last 365 days, with recent weeks counting most.</p>
+    <p>Days when an item was out of stock are left out. Otherwise the planner would learn that an empty shelf means nobody wants it. A run of zero-sale days counts as a stockout when it’s too long to be bad luck for that item, or when the item is at zero right now.</p></section>
+  <section><h3>Seasons</h3>
+    <p>With about 15 months of history, the planner compares each department’s sales in the coming weeks last year with the weeks just before. That ratio scales the forecast, so Thanksgiving, December and summer beer are planned for before they arrive.</p></section>
+  <section><h3>Building your order</h3>
+    <p>Nothing goes on your order by itself. The Reorder list shows what the planner suggests and why; click <b>Add</b> on an item, or <b>Add all shown to order</b> after filtering (for example, to one distributor). QDs you add from the quick QD check go on too.</p>
+    <p>The Order sheets show only what you added, one sheet per distributor. Change quantities there with − and +, take items off with ×, then copy or download each sheet for your rep. Your order is kept in this browser until you clear it.</p></section>
+  <section><h3>How much to order</h3>
+    <p class="formula">order = (rate × season × (lead time + order cycle)) + safety stock − on hand − on order</p>
+    <p>Safety stock covers normal week-to-week swings. It grows with how erratic an item’s sales are and with the in-stock target for its A/B/C rank. The result is rounded to full cases unless you set a distributor to single units.</p></section>
+  <section><h3>Flags</h3>
+    <ul><li><b>Out of stock:</b> zero or negative on hand for an item that sells.</li>
+    <li><b>Runs out before delivery:</b> current stock won’t last until an order placed today arrives.</li>
+    <li><b>No recent sales:</b> stock on the shelf with no sale in the dead-stock window.</li>
+    <li><b>Overstocked:</b> more than the overstock window of supply on hand.</li>
+    <li><b>Negative count:</b> Advent shows less than zero, which usually means a receiving or count error.</li></ul></section>
+  <section><h3>Your data</h3>
+    <p><b>On your Cloudflare site</b> (when the top right says “Shared storage”), uploaded files, your order, QDs, saved deals and settings are saved to your own Cloudflare storage behind your Access sign-in, so every computer you sign in on sees the same thing.</p>
+    <p><b>Anywhere else</b>, files are read inside this browser tab and are not uploaded anywhere; everything is saved in this browser on this computer only. Keep your exports either way.</p></section>
+  <section><h3>Quantity deals</h3>
+    <p><b>Quick QD check:</b> pick the item, type the QD quantity and tick whether sizes and flavours mix. The split updates as you type and nothing is saved. Add the discount to see whether the extra stock is worth it.</p>
+    <p><b>Saved deals</b> keep a deal for the month, compare several tiers and feed the Reorder list. Pick the item, tick whether sizes and flavours mix, and enter each tier. For every tier the planner starts from your normal order and adds one case at a time to whichever item would run out first, so the extra stock is spread by how fast each item sells. It won’t push any item past the days-of-supply limit you set.</p>
+    <p>It then compares the discount with the cost of carrying the extra stock (the holding cost in Settings, 20% a year by default, covers tied-up cash, space and breakage) and recommends the tier that leaves you furthest ahead, or skipping the deal.</p></section>
+  <section><h3>Case sizes</h3>
+    <p>Advent’s Item List has no case size, so the planner estimates one from bottle size and pack: 750ml is 12 per case, 1.75L is 6, 50ml is 120, beer 6pk is 4 per case, 12pk is 2. Estimates are marked “est.” Set the real number on any item from its panel, or turn estimates off in Settings to order by the unit.</p></section>
+  </div>`;
+}
+
+/* ---------- wiring ---------- */
+function recompute(){compute();renderAll()}
+function bindDrop(el,input,kind){
+  el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('drag')});
+  el.addEventListener('dragleave',()=>el.classList.remove('drag'));
+  el.addEventListener('drop',e=>{e.preventDefault();el.classList.remove('drag');const f=[...e.dataTransfer.files];if(f.length)queueFiles(kind==='inv'?f.slice(0,1):f,kind)});
+  input.onchange=()=>{const f=[...input.files];input.value='';if(f.length)queueFiles(f,kind)};
+}
+$('#btnInv').onclick=()=>$('#fileInv').click();
+$('#btnSales').onclick=()=>$('#fileSales').click();
+$('#btnClearSales').onclick=()=>{
+  const n=S.sales.length,box=$('#salesConfirm');
+  box.innerHTML=`<p><b>Remove all ${n} sales file${n===1?'':'s'}?</b> Forecasts will have no sales history until you add files again. Your item list, order, QDs and settings stay.</p><div class="row"><button class="btn small danger" id="salesClearYes" type="button">Remove all files</button><button class="btn small ghost" id="salesClearNo" type="button">Cancel</button></div>`;
+  box.hidden=false;$('#salesClearNo').focus();
+  $('#salesClearNo').onclick=()=>{box.hidden=true};
+  $('#salesClearYes').onclick=()=>{box.hidden=true;S.sales=[];S.showAllFiles=false;persist();recompute();manifestOp({clearSales:true});toast(`Removed ${n} sales file${n===1?'':'s'}`)};
+};
+bindDrop($('#srcInv'),$('#fileInv'),'inv');
+bindDrop($('#srcSales'),$('#fileSales'),'sales');
+$('#salesFiles').addEventListener('click',e=>{const b=e.target.closest('[data-rm]');if(!b)return;const [f]=S.sales.splice(+b.dataset.rm,1);persist();recompute();if(f&&f.id)manifestOp({removeSales:[f.id]})});
+$('#btnSettings').onclick=openSettings;
+$('#q').oninput=e=>{S.q=e.target.value;S.limit=200;renderView()};
+$('#fVendor').onchange=e=>{S.vendor=e.target.value;S.limit=200;renderView()};
+$('#fCat').onchange=e=>{S.cat=e.target.value;S.limit=200;renderView()};
+$('#fFlag').onchange=e=>{S.flag=e.target.value;S.limit=200;renderView()};
+let clearArmed=false;
+$('#btnClear').onclick=()=>{
+  const b=$('#btnClear');
+  if(!clearArmed){clearArmed=true;b.textContent='Click again to clear your files from this browser';setTimeout(()=>{clearArmed=false;b.textContent='Clear loaded data'},5000);return}
+  clearArmed=false;b.textContent='Clear loaded data';
+  idb.set('data',null);manifestOp({clearAll:true});cart={};saveCartForce();const s=makeSample();S.sample=true;S.inv=s.inv;S.sales=s.sales;S.showAllFiles=false;resetQuick();recompute();seedSampleCart();toast('Cleared. Showing the sample store.');
+};
+$('#btnExportAll').onclick=()=>{
+  if(S.view==='reorder'){
+    // every suggestion the Reorder list is showing (after search and filters) that isn't on the order yet
+    const add=reorderList().filter(x=>x.units>0&&!x.ord&&!x.held);
+    if(!add.length){toast('Everything shown is already on your order');return}
+    const c=cartObj();for(const x of add)c[x.key]=x.units;saveCart();refreshOrders();
+    toast(`Added ${add.length} item${add.length===1?'':'s'} to your order`);return;
+  }
+  const g=orderGroups();if(!g.length){toast('Your order is empty');return}saveFile(`orders-${toIso(S.res.ctx.T)}.csv`,toCsv(g));
+};
+let clearOrderArmed=false;
+$('#btnClearOrder').onclick=()=>{
+  const b=$('#btnClearOrder');
+  if(!clearOrderArmed){clearOrderArmed=true;b.textContent='Click again to empty the order';setTimeout(()=>{clearOrderArmed=false;b.textContent='Clear order'},5000);return}
+  clearOrderArmed=false;b.textContent='Clear order';
+  if(S.sample)SAMPLE_CART={};else{cart={};saveCart()}
+  qdList().splice(0);saveQd();refreshOrders();toast('Order cleared');
+};
+
+const sample=makeSample();
+S.inv=sample.inv;S.sales=sample.sales;
+resetQuick();
+recompute();
+seedSampleCart();
+(async()=>{
+  if(await cloudInit()){resetQuick();recompute();if(S.sample)seedSampleCart();return}
+  const saved=await idb.get('data');
+  if(!saved||!S.sample||S.pending.length||(!saved.inv&&!(saved.sales||[]).length))return;
+  S.sample=false;S.inv=saved.inv;S.sales=saved.sales||[];resetQuick();recompute();
+  toast('Loaded your saved files from this browser');
+})();
+})();
+</script>
