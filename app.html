@@ -111,6 +111,19 @@ details.unmatched ul{margin:6px 0 0;padding-left:18px;font-size:12.5px;color:var
 .filters input,.filters select{padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);min-width:0}
 .filters input{flex:1 1 220px}
 .filters .spacer{flex:1}
+.msel{position:relative}
+.msel-btn{padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer;white-space:nowrap;max-width:240px;overflow:hidden;text-overflow:ellipsis}
+.msel-btn.on{border-color:var(--accent);color:var(--accent)}
+.msel-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.msel-pop{min-width:280px}
+table.items.buys{min-width:0}
+.msel-pop input[type=search]{padding:6px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);width:100%}
+.msel-pop .check{display:flex;gap:8px;align-items:flex-start;cursor:pointer}
+.msel-pop .check input{flex:none;margin:1px 0 0}
+.msel-pop .check>span:first-of-type{flex:1;min-width:0}
+.msel-pop .check .sub{flex:none;padding-left:8px}
+.exp-pop{left:auto;right:0;min-width:230px}
+.exp-pop .btn{justify-content:flex-start;text-align:left}
 .totals{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:baseline;font-size:13px;color:var(--ink-2);margin-top:-6px}
 .totals b{font-family:var(--f-mono);font-weight:500;font-size:14px;color:var(--ink);font-variant-numeric:tabular-nums}
 
@@ -301,6 +314,12 @@ textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12
       <p>Advent’s Departmentwise Item Sales report, one file per week, as far back as you can. Two years lets the planner learn your seasons. Select many files at once.</p>
       <input type="file" id="fileSales" accept=".csv,.txt,.tsv,.xls,.xlsx,.pdf" multiple hidden>
     </div>
+    <div class="src" id="srcPurch">
+      <div class="src-head"><span class="label">Distributors</span><div class="row"><button class="btn small ghost" id="btnClearPurch" type="button" hidden>Remove</button><button class="btn small" id="btnPurch" type="button">Choose file</button></div></div>
+      <ul class="files" id="purchFiles"></ul>
+      <p>Optional. Advent’s Item Purchase By Vendor report. It sets each item’s distributor (the one you bought the most from) and shows what you paid each one. Your own distributor picks still win.</p>
+      <input type="file" id="filePurch" accept=".csv,.txt,.tsv,.xls,.xlsx,.pdf" hidden>
+    </div>
   </div>
   <div class="row" style="justify-content:space-between"><div id="matchInfo"></div><button class="btn ghost small" id="btnClear" type="button" hidden>Clear loaded data</button></div>
   <div id="mapper"></div>
@@ -312,10 +331,12 @@ textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12
   </div>
   <div class="filters" id="filters">
     <input type="search" id="q" placeholder="Search item, SKU or UPC" aria-label="Search items">
-    <select id="fVendor" aria-label="Filter by vendor"></select>
-    <select id="fCat" aria-label="Filter by category"></select>
-    <select id="fFlag" aria-label="Filter by status"></select>
+    <div class="msel" id="fVendor"></div>
+    <div class="msel" id="fCat"></div>
+    <div class="msel" id="fFlag"></div>
+    <button class="btn ghost small" id="fReset" type="button" hidden>Clear filters</button>
     <span class="spacer"></span>
+    <div class="msel" id="exportWrap"><button class="btn" id="btnExport" type="button" aria-haspopup="true" aria-expanded="false">Export ▾</button><div class="mixpop msel-pop exp-pop" id="exportPop" hidden></div></div>
     <button class="btn ghost" id="btnClearOrder" type="button" hidden>Clear order</button>
     <button class="btn" id="btnExportAll" type="button">Download all orders (CSV)</button>
   </div>
@@ -380,7 +401,7 @@ const idb={
   async get(k){try{const db=await this.open();return await new Promise((res,rej)=>{const t=db.transaction('kv').objectStore('kv').get(k);t.onsuccess=()=>res(t.result);t.onerror=()=>rej(t.error)})}catch(e){return null}},
   async set(k,v){try{const db=await this.open();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)});return true}catch(e){return false}}
 };
-function persist(){if(!S.sample&&!cloud.on)idb.set('data',{inv:S.inv,sales:S.sales})}
+function persist(){if(!cloud.on&&(!S.sample||S.purch))idb.set('data',{inv:S.sample?null:S.inv,sales:S.sample?[]:S.sales,purch:S.purch})}
 
 /* ---------- shared storage (the Cloudflare site) ---------- */
 // On the Cloudflare site, uploaded files, the order, QDs, saved deals and settings live in your R2 bucket,
@@ -451,7 +472,7 @@ async function fileFromCloud(meta){
   out.id=meta.id;idb.set('cf:'+meta.id,out);return out;
 }
 async function loadManifest(m){
-  const metas=[...(m.inventory?[m.inventory]:[]),...(m.sales||[])];
+  const metas=[...(m.inventory?[m.inventory]:[]),...(m.purchases?[m.purchases]:[]),...(m.sales||[])];
   let done=0;const outs=new Map(),failed=[];
   const sub=$('#subline');
   const work=metas.slice();
@@ -460,6 +481,7 @@ async function loadManifest(m){
   if(failed.length)toast(`Couldn’t load ${failed.length} shared file${failed.length===1?'':'s'}: ${failed[0]}`);
   const inv=m.inventory&&outs.get(m.inventory.id)||null;
   const sales=(m.sales||[]).map(f=>outs.get(f.id)).filter(Boolean);
+  S.purch=m.purchases&&outs.get(m.purchases.id)||null;
   if(inv||sales.length){S.sample=false;S.inv=inv;S.sales=sales}
   else{const smp=makeSample();S.sample=true;S.inv=smp.inv;S.sales=smp.sales}
   cloud.manifest=m;
@@ -491,9 +513,10 @@ async function cloudUpload(items){
     }catch(e){failed++;cloud.error=e.message}}}
   await Promise.all(Array.from({length:Math.min(4,items.length)},worker));
   metas.sort((a,b)=>a._i-b._i);metas.forEach(m=>delete m._i);
-  const inv=metas.find(m=>m.kind==='inv'),sales=metas.filter(m=>m.kind==='sales');
+  const inv=metas.find(m=>m.kind==='inv'),purch=metas.find(m=>m.kind==='purch'),sales=metas.filter(m=>m.kind==='sales');
   cloud.saving--;
   if(inv)await manifestOp({setInventory:inv});
+  if(purch)await manifestOp({setPurchases:purch});
   if(sales.length)await manifestOp({addSales:sales});
   if(failed)toast(`${failed} file${failed===1?'':'s'} couldn’t be saved to shared storage and only ${failed===1?'is':'are'} in this browser. Add ${failed===1?'it':'them'} again to retry.`);
   else toast(`Saved ${metas.length} file${metas.length===1?'':'s'} to shared storage`);
@@ -524,8 +547,8 @@ function syncStatus(){
 async function offerMigration(){
   const saved=await idb.get('data');
   const local={};for(const k of SYNCED){const v=store.get(k,null);if(v&&(Array.isArray(v)?v.length:Object.keys(v).length))local[k]=v}
-  const hasFiles=saved&&(saved.inv||(saved.sales||[]).length);
-  const cloudEmpty=!cloud.manifest.inventory&&!(cloud.manifest.sales||[]).length&&SYNCED.every(k=>!Object.keys(cloud.maps[k]||{}).length);
+  const hasFiles=saved&&(saved.inv||saved.purch||(saved.sales||[]).length);
+  const cloudEmpty=!cloud.manifest.inventory&&!cloud.manifest.purchases&&!(cloud.manifest.sales||[]).length&&SYNCED.every(k=>!Object.keys(cloud.maps[k]||{}).length);
   if(!cloudEmpty||(!hasFiles&&!Object.keys(local).length)||store.get('migrated',false))return;
   const el=$('#migrate');el.hidden=false;
   el.innerHTML=`<div><b>This browser has data saved from before shared storage was on.</b> ${hasFiles?`${saved.inv?'An item list':''}${saved.inv&&(saved.sales||[]).length?' and ':''}${(saved.sales||[]).length?`${saved.sales.length} sales file${saved.sales.length===1?'':'s'}`:''}`:'Settings and your order'}. Copy it to shared storage so your other computers see it too?</div><div class="row"><button class="btn small primary" id="migYes" type="button">Copy to shared storage</button><button class="btn small ghost" id="migNo" type="button">Not now</button></div>`;
@@ -535,6 +558,7 @@ async function offerMigration(){
     for(const [k,v] of Object.entries(local)){cloud.want[k]=v;await cloudPush(k)}
     const items=[];
     if(saved&&saved.inv){saved.inv.id=saved.inv.id||newId();items.push({x:{kind:'inv',fileName:saved.inv.fileName},out:saved.inv,named:{}})}
+    if(saved&&saved.purch){saved.purch.id=saved.purch.id||newId();items.push({x:{kind:'purch',fileName:saved.purch.fileName},out:saved.purch,named:{}})}
     for(const f of (saved&&saved.sales)||[]){f.id=f.id||newId();items.push({x:{kind:'sales',fileName:f.fileName,from:f.from,to:f.to},out:f,named:{}})}
     await cloudUpload(items);
     store.set('migrated',true);el.hidden=true;
@@ -556,7 +580,7 @@ async function cloudInit(){
   }
   cloud.on=true;cloud.user=j.user||'';cloud.maps=j.maps||{};cloud.last=Date.now();
   useMaps(SYNCED.filter(k=>Object.keys(cloud.maps[k]||{}).length));
-  await loadManifest(j.manifest||{inventory:null,sales:[]});
+  await loadManifest(j.manifest||{inventory:null,purchases:null,sales:[]});
   $('#sampleBanner').innerHTML='<div><b>This is sample data for a made-up store.</b> Load your Advent inventory and sales exports below to replace it. They’re saved to your shared storage, so every computer you sign in on sees them.</div>';
   setInterval(cloudPull,30000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)cloudPull()});
@@ -569,7 +593,7 @@ const SAMPLE_OV={};
 const vendorOf=v=>Object.assign({},VDEF,S.sample?SAMPLE_V[v]||{}:{},vendorCfg[v]||{});
 const getOv=k=>Object.assign({},S.sample?SAMPLE_OV[k]||{}:{},overrides[k]||{});
 
-const S={sample:true,inv:null,sales:[],pending:[],res:null,view:'reorder',q:'',vendor:'',cat:'',flag:'',limit:200,showAllFiles:false,
+const S={sample:true,inv:null,sales:[],purch:null,pending:[],res:null,view:'reorder',q:'',vendor:[],cat:[],flag:[],limit:200,showAllFiles:false,
   quick:{anchor:'',qty:'',countIn:'case',mixSizes:false,mixFlavors:false,disc:'',extra:[],manual:{},review:{},why:{},note:'',busy:null},
   sort:{reorder:['urg',1],all:['name',1],dead:['tied',-1]}};
 
@@ -634,6 +658,9 @@ const INV_FIELDS=[
   {k:'sku',label:'Item # / SKU'},{k:'upc',label:'UPC / barcode'},{k:'name',label:'Description'},{k:'size',label:'Size'},
   {k:'category',label:'Department / category'},{k:'vendor',label:'Vendor / distributor'},{k:'onHand',label:'Quantity on hand',req:true},
   {k:'onOrder',label:'On order'},{k:'cost',label:'Unit cost'},{k:'price',label:'Retail price'},{k:'pack',label:'Pack (single, 6pk…)'},{k:'casePack',label:'Units per case'}];
+const PURCH_FIELDS=[
+  {k:'vendor',label:'Vendor / distributor',req:true},{k:'sku',label:'Item # / SKU'},{k:'upc',label:'UPC / barcode'},{k:'name',label:'Description'},
+  {k:'size',label:'Size'},{k:'pqty',label:'Quantity received'},{k:'ptotal',label:'Total purchase $'},{k:'pavg',label:'Average price paid'}];
 const SALES_FIELDS=[
   {k:'date',label:'Sale date'},{k:'sku',label:'Item # / SKU'},{k:'upc',label:'UPC / barcode'},{k:'name',label:'Description'},
   {k:'size',label:'Size'},{k:'qty',label:'Quantity sold',req:true},{k:'amount',label:'Sales $'}];
@@ -641,9 +668,9 @@ const SYN={
   sku:['sku','item','item no','item number','itemnum','item num','item code','item id','itemid','plu','product code','product id','stock code','code','id'],
   upc:['upc','mainupc','main upc','barcode','bar code','upc code','ean','upc ean','scan code','upc1'],
   name:['description','item description','item name','itemname','desc','name','product','product name','product description','descr'],
-  size:['size','sizename','size name','bottle size','unit size','item size','volume','sz','ml'],
+  size:['size','sizename','size name','bottle size','unit size','item size','volume','sz','ml','sizepack','size pack'],
   category:['department','depname','dept','dept name','department name','category','catname','class','type','sub department','dept id','deptid'],
-  vendor:['vendor','vendor name','vendorname','supplier','distributor','primary vendor','wholesaler','supplier name','vendor id','vendor number','vendor no','vendorid'],
+  vendor:['vendor name','vendorname','vendor','supplier','distributor','primary vendor','wholesaler','supplier name','vendor id','vendor number','vendor no','vendorid'],
   onHand:['totalqty','total qty','qty on hand','quantity on hand','on hand','onhand','qoh','instoreqty','in stock','instock','on hand qty','current stock','stock','qty','quantity','available','inventory','in stock qty','units on hand'],
   onOrder:['on order','qty on order','onorder','ordered','quantity on order'],
   cost:['cost','currentcost','unit cost','unitcost','avg cost','avgcost','average cost','last cost','cost each','current cost'],
@@ -652,8 +679,11 @@ const SYN={
   pack:['packname','pack name','pack','pack size','pack type'],
   date:['date','sale date','sales date','trans date','transaction date','business date','invoice date','date sold','sold date','day'],
   qty:['qtysold','qty sold','quantity sold','units sold','unitssold','sold qty','sales qty','total units','sold','qty','quantity','units','number sold','count'],
+  pqty:['qtyreceived','qty received','quantity received','units received','received qty','received','qty purchased','quantity purchased','qty','quantity','units'],
+  ptotal:['totalpurchase','total purchase','purchase total','total cost','extended cost','ext cost','purchase amount','total','amount'],
+  pavg:['avgprice','avg price','average price','avg cost','average cost','unit cost','cost','price'],
   amount:['salesamount','net sales','sales','amount','sales amount','total','ext price','extended price','extended','net amount','total sales','gross sales','ext amount','revenue']};
-const ORDER={inv:['upc','sku','onHand','onOrder','casePack','pack','cost','price','vendor','category','size','name'],sales:['date','upc','sku','qty','amount','size','name']};
+const ORDER={purch:['vendor','sku','upc','pqty','ptotal','pavg','size','name'],inv:['upc','sku','onHand','onOrder','casePack','pack','cost','price','vendor','category','size','name'],sales:['date','upc','sku','qty','amount','size','name']};
 
 /* ---------- case size estimate (Advent's item list has no case size) ---------- */
 const LIQ=/wine|champ|spark|vodka|whisk|bourbon|tequila|mezcal|rum|gin|liqueur|cordial|brandy|cognac|scotch|grain|spirit|sake|vermouth|^bar$|cocktail|rtd/i;
@@ -752,12 +782,19 @@ async function queueFiles(files,kind){
     try{
       const rows=await readTable(file);
       if(!rows.length)throw new Error('The file is empty.');
-      const p={kind,fileName:file.name,rows,file};
-      setHeader(p,detectHeader(rows,kind));
+      let k=kind;
+      if(k!=='purch'&&looksLikePurchases(rows)){k='purch';toast(file.name+' is a purchase-by-vendor report, so it’s loaded as your distributor list')}
+      const p={kind:k,fileName:file.name,rows,file};
+      setHeader(p,detectHeader(rows,k));
       S.pending.push(p);
     }catch(e){toast(file.name+': '+e.message)}
   }
   renderMapper();
+}
+// Advent's Item Purchase By Vendor report: a vendor name next to quantities received
+function looksLikePurchases(rows){
+  for(const r of rows.slice(0,30)){const H=(r||[]).map(normH);if(H.some(h=>/^vendor ?name$|^vendor$/.test(h))&&H.some(h=>/received|purchase/.test(h)))return true}
+  return false;
 }
 function setHeader(p,idx){
   p.headerIdx=idx;
@@ -793,6 +830,21 @@ function applyPending(p){
     }
     if(!items.size)throw new Error('No item rows found under the header row. Check that the header row number is right.');
     return {fileName:p.fileName,items:[...items.values()]};
+  }
+  if(p.kind==='purch'){
+    if(p.map.vendor==null)throw new Error('Pick the column that holds the vendor name.');
+    if(p.map.sku==null&&p.map.upc==null&&p.map.name==null)throw new Error('Pick at least one of Item #, UPC or Description so purchases can be matched to items.');
+    const rows=[];
+    for(const row of body){
+      const vendor=String(g(row,'vendor')??'').trim().replace(/\s+/g,' '),name=String(g(row,'name')??'').trim(),skuRaw=g(row,'sku'),upcRaw=g(row,'upc');
+      if(!vendor||(!name&&!String(skuRaw??'').trim()&&!String(upcRaw??'').trim()))continue;
+      if(isTotal(vendor)||isTotal(name))continue;
+      const size=String(g(row,'size')??'').trim(),q=num(g(row,'pqty')),t=num(g(row,'ptotal')),a=num(g(row,'pavg'));
+      rows.push({sku:normCode(skuRaw),upc:normCode(upcRaw),nm:normName(name),nms:normName(name+' '+size.split(',')[0]),label:name||String(skuRaw||upcRaw),vendor,
+        qty:isNaN(q)?0:Math.max(0,q),total:isNaN(t)?0:Math.max(0,t),avg:isNaN(a)?0:Math.max(0,a)});
+    }
+    if(!rows.length)throw new Error('No purchase rows found. Check the header row and the vendor column.');
+    return {fileName:p.fileName,rows,vendors:new Set(rows.map(r=>r.vendor)).size};
   }
   if(p.map.qty==null)throw new Error('Pick the column that holds quantity sold.');
   if(p.map.sku==null&&p.map.upc==null&&p.map.name==null)throw new Error('Pick at least one of Item #, UPC or Description so sales can be matched to items.');
@@ -960,17 +1012,39 @@ function buildAgg(){
     const c=cat.get(k);let a=catArr.get(c);if(!a){a=new Float64Array(N);catArr.set(c,a)}
     for(let i=0;i<N;i++){const q=st.sArr[i];if(q){a[i]+=q;tot[i]+=q}}
   }
-  return {inv:S.inv,sales:S.sales.slice(),skipSig:[...skipD].sort().join('|'),T,N,minDay,hasSales,stat,unmatched,matched,totalRows,catArr,tot};
+  // purchases by distributor: what was bought from whom, per item
+  const buys=new Map();let pMatched=0,pRows=0;
+  if(S.purch)for(const r of S.purch.rows){
+    pRows++;
+    const it=(r.sku&&(bySku.get(r.sku)||byUpc.get(r.sku)))||(r.upc&&(byUpc.get(r.upc)||bySku.get(r.upc)))||(r.nms&&byName.get(r.nms))||(r.nm&&(byNm.get(r.nm)||byName.get(r.nm)));
+    if(!it)continue;
+    pMatched++;
+    let m=buys.get(it.key);if(!m){m=new Map();buys.set(it.key,m)}
+    const b=m.get(r.vendor)||{vendor:r.vendor,qty:0,total:0,avgs:0};
+    b.qty+=r.qty;b.total+=r.total;if(!b.avgs&&r.avg)b.avgs=r.avg;m.set(r.vendor,b);
+  }
+  const buyList=new Map();
+  for(const [k,m] of buys){
+    const l=[...m.values()].map(b=>({vendor:b.vendor,qty:b.qty,total:b.total,avg:b.qty>0&&b.total>0?b.total/b.qty:b.avgs}));
+    // the distributor bought from most is the item's distributor
+    l.sort((a,b)=>b.qty-a.qty||b.total-a.total);buyList.set(k,l);
+  }
+  return {inv:S.inv,sales:S.sales.slice(),purch:S.purch,buyList,pMatched,pRows,skipSig:[...skipD].sort().join('|'),T,N,minDay,hasSales,stat,unmatched,matched,totalRows,catArr,tot};
 }
 function compute(){
   if(!S.inv){S.res=null;return}
   const skipSig=[...new Set(S.inv.items.map(i=>i.category).filter(d=>deptOf(d).skip))].sort().join('|');
   let A=S.agg;
-  if(!A||A.inv!==S.inv||A.skipSig!==skipSig||A.sales.length!==S.sales.length||A.sales.some((f,i)=>f!==S.sales[i]))A=S.agg=buildAgg();
+  if(!A||A.inv!==S.inv||A.purch!==S.purch||A.skipSig!==skipSig||A.sales.length!==S.sales.length||A.sales.some((f,i)=>f!==S.sales[i]))A=S.agg=buildAgg();
   const {T,N,minDay,hasSales,catArr,tot,unmatched,matched,totalRows}=A;
   const items=S.inv.items.map(it=>{
-    const ov=overrides[it.key]||{},dc=deptOf(it.category),st=A.stat.get(it.key);
-    return Object.assign({},it,{vendor:ov.vendor||it.vendor||dc.vendor||NO_DIST,skip:dc.skip,sArr:st?st.sArr:null,rev:st?st.rev:0,firstSale:st?st.firstSale:null,lastSale:st?st.lastSale:null,spread:st?st.spread:false});
+    const ov=overrides[it.key]||{},dc=deptOf(it.category),st=A.stat.get(it.key),buys=A.buyList.get(it.key)||null;
+    // your pick, then the item list's own column, then who you bought from most, then the department default
+    const pv=buys?buys[0].vendor:'';
+    const vsrc=ov.vendor?'you':it.vendor?'file':pv?'purch':dc.vendor?'dept':'';
+    // no cost in the item list: use the average price paid to the main distributor
+    const pc=!(it.cost>0)&&buys&&buys[0].avg>0?buys[0].avg:0;
+    return Object.assign({},it,{buys,vsrc,cost:pc||it.cost,costSrc:pc?'purch':'file',vendor:ov.vendor||it.vendor||pv||dc.vendor||NO_DIST,skip:dc.skip,sArr:st?st.sArr:null,rev:st?st.rev:0,firstSale:st?st.firstSale:null,lastSale:st?st.lastSale:null,spread:st?st.spread:false});
   });
   const seasonOK=settings.useSeason&&N>=365+91;
   const sum=(arr,a,b)=>{let s=0;for(let i=Math.max(0,a);i<Math.min(arr.length,b);i++)s+=arr[i];return s};
@@ -1000,7 +1074,7 @@ function compute(){
   const overlaps=new Set();
   S.sales.forEach((a,i)=>S.sales.forEach((b,j)=>{if(i<j&&a.from<=b.to&&b.from<=a.to){overlaps.add(i);overlaps.add(j)}}));
   const allDepts=new Map();for(const it of items)allDepts.set(it.category,(allDepts.get(it.category)||0)+1);
-  S.res={ctx,results,byKey:new Map(results.map(r=>[r.key,r])),unmatched,matched,totalRows,hasSales,overlaps,allDepts};
+  S.res={ctx,results,byKey:new Map(results.map(r=>[r.key,r])),unmatched,matched,totalRows,hasSales,overlaps,allDepts,pMatched:A.pMatched,pRows:A.pRows};
   applyDeals();
 }
 
@@ -1312,9 +1386,10 @@ function filtered(){
   if(!S.res)return [];
   const q=S.q.trim().toLowerCase(),qc=normCode(S.q);
   return S.res.results.filter(r=>{
-    if(S.vendor&&r.it.vendor!==S.vendor)return false;
-    if(S.cat&&r.it.category!==S.cat)return false;
-    if(S.flag&&!r.flags.includes(S.flag))return false;
+    // within one filter any ticked choice matches; across filters all must match
+    if(S.vendor.length&&!S.vendor.includes(r.it.vendor))return false;
+    if(S.cat.length&&!S.cat.includes(r.it.category))return false;
+    if(S.flag.length&&!S.flag.some(f=>r.flags.includes(f)))return false;
     if(q){const it=r.it;if(!(it.name.toLowerCase().includes(q)||(qc&&(normCode(it.sku).includes(qc)||normCode(it.upc).includes(qc)))))return false}
     return true;
   });
@@ -1340,6 +1415,8 @@ function renderSources(){
   const inv=S.inv;
   $('#invFiles').innerHTML=inv?`<li><span>${esc(inv.fileName)}</span><small>${int(inv.items.length)} items</small></li>`:'<li><span>No file loaded</span></li>';
   const r=S.res,ovl=r?r.overlaps:new Set();
+  $('#purchFiles').innerHTML=S.purch?`<li><span>${esc(S.purch.fileName)}</span><small>${int(S.purch.vendors)} distributors${r&&r.pRows?` · ${int(r.pMatched)} of ${int(r.pRows)} rows matched`:''}</small></li>`:'<li><span>No file loaded</span></li>';
+  $('#btnClearPurch').hidden=!S.purch;
   // newest first; long histories collapse to the latest few
   const order=S.sales.map((f,i)=>i).sort((a,b)=>S.sales[b].from-S.sales[a].from);
   const showAll=S.showAllFiles||order.length<=6;
@@ -1358,7 +1435,9 @@ function renderSources(){
     const notes=[];
     if(neg)notes.push(`<span><button class="btn ghost small" type="button" data-flag="count">${int(neg)} item${neg===1?' shows':'s show'} negative stock in Advent</button> ${neg===1?'It’s':'They’re'} treated as 0, so ${neg===1?'its order is':'their orders are'} only as good as the count.</span>`);
     if(noCost)notes.push(`<span>${int(noCost)} item${noCost===1?'':'s'} on your order ${noCost===1?'has':'have'} no cost in Advent, so the order total runs low.</span>`);
-    if(noDist)notes.push(`<span>The inventory list has no distributor column. <button class="btn ghost small" type="button" data-open="settings">Assign distributors by department</button></span>`);
+    const noDistSold=r.results.filter(x=>x.it.vendor===NO_DIST&&x.base>0).length;
+    if(noDist&&!S.purch)notes.push(`<span>The inventory list has no distributor column. Load the Item Purchase By Vendor report under Distributors, or <button class="btn ghost small" type="button" data-open="settings">assign distributors by department</button></span>`);
+    else if(noDistSold)notes.push(`<span><button class="btn ghost small" type="button" data-vfilter="${esc(NO_DIST)}">${int(noDistSold)} selling item${noDistSold===1?' has':'s have'} no distributor</button> ${noDistSold===1?'It wasn’t':'They weren’t'} in the purchase report. Set one in the item’s details or by department in Settings.</span>`);
     if(notes.length)h+=`<div class="matchline">${notes.join('')}</div>`;
     if(r.unmatched.size){
       const top=[...r.unmatched.entries()].sort((a,b)=>b[1]-a[1]).slice(0,60);
@@ -1366,7 +1445,8 @@ function renderSources(){
     }
   }
   $('#matchInfo').innerHTML=h;$('#matchInfo').hidden=!h;
-  $$('[data-flag]',$('#matchInfo')).forEach(b=>b.onclick=()=>{S.view='all';S.flag=b.dataset.flag;S.limit=200;renderTabs();renderFilters();renderView();$('#tabs').scrollIntoView({behavior:'smooth'})});
+  $$('[data-flag]',$('#matchInfo')).forEach(b=>b.onclick=()=>{goTab('all');S.flag=[b.dataset.flag];renderFilters();renderView();$('#tabs').scrollIntoView({behavior:'smooth'})});
+  $$('[data-vfilter]',$('#matchInfo')).forEach(b=>b.onclick=()=>{goTab('all');S.vendor=[b.dataset.vfilter];renderFilters();renderView();$('#tabs').scrollIntoView({behavior:'smooth'})});
   $$('[data-open]',$('#matchInfo')).forEach(b=>b.onclick=openSettings);
 }
 
@@ -1376,7 +1456,7 @@ function renderMapper(scroll=true){
   // files with the same columns are matched once, together
   const sig=sigOf(p.headers);
   const group=S.pending.filter(x=>x.kind===p.kind&&sigOf(x.headers)===sig);
-  const fields=p.kind==='inv'?INV_FIELDS:SALES_FIELDS;
+  const fields=p.kind==='inv'?INV_FIELDS:p.kind==='purch'?PURCH_FIELDS:SALES_FIELDS;
   const opts=sel=>'<option value="">— not in file —</option>'+p.headers.map((h,i)=>`<option value="${i}"${sel===i?' selected':''}>${esc(h)}</option>`).join('');
   const usedCols=new Set(Object.values(p.map));
   const body=p.rows.slice(p.headerIdx+1,p.headerIdx+7);
@@ -1391,7 +1471,7 @@ function renderMapper(scroll=true){
   const dateRows=group.map((x,i)=>`<tr><td>${esc(x.fileName)}${x.endCut?`<div class="sub">Advent cut-off at 5 AM on ${fmtDayShort(x.to+1)}, so sales through ${fmtDayShort(x.to)}</div>`:''}</td><td><input id="dF${i}" data-g="${i}" data-w="from" type="date" value="${x.from!=null?toIso(x.from):''}" aria-label="First day for ${esc(x.fileName)}"></td><td><input id="dT${i}" data-g="${i}" data-w="to" type="date" value="${x.to!=null?toIso(x.to):''}" aria-label="Last day for ${esc(x.fileName)}"></td><td class="mono">${x.from!=null&&x.to!=null&&x.to>=x.from?x.to-x.from+1:'—'}</td></tr>`).join('');
   el.innerHTML=`<div class="mapper">
     <div class="row" style="justify-content:space-between"><h3>Match columns: ${group.length>1?`${group.length} files with the same columns`:esc(p.fileName)}</h3><span class="hint">${rest>0?`${rest} more file(s) after this`:''}</span></div>
-    <p class="hint">${p.kind==='inv'?'This is your inventory list.':'This is a sales report.'} The planner guessed which column is which. Check the guesses against the preview and fix any that are wrong. Your choices are remembered for the next export with the same columns.</p>
+    <p class="hint">${p.kind==='inv'?'This is your inventory list.':p.kind==='purch'?'This is your purchases by distributor.':'This is a sales report.'} The planner guessed which column is which. Check the guesses against the preview and fix any that are wrong. Your choices are remembered for the next export with the same columns.</p>
     <div class="map-grid">
       <div class="field"><label for="mHdr">Header row (row number in file)</label><input id="mHdr" type="number" min="1" max="${Math.min(40,p.rows.length)}" value="${p.headerIdx+1}"></div>
       ${fields.map(f=>`<div class="field"><label for="m_${f.k}">${f.label}${f.req?' <i>*</i>':''}</label><select id="m_${f.k}" data-f="${f.k}">${opts(p.map[f.k])}</select></div>`).join('')}
@@ -1432,12 +1512,12 @@ function renderMapper(scroll=true){
     }
     const named={};for(const [f,i] of Object.entries(p.map))named[f]=p.headers[i];
     store.set('map.'+p.kind+'.'+sigOf(p.headers),named);
-    if(S.sample){S.sample=false;S.inv=null;S.sales=[];resetQuick()}
+    if(S.sample&&p.kind!=='purch'){S.sample=false;S.inv=null;S.sales=[];resetQuick()}
     let rows=0,bad=0;
-    for(const [x,out] of outs){out.id=newId();if(x.kind==='inv'){S.inv=out}else{S.sales.push(out);rows+=out.rows.length;bad+=out.bad||0}}
+    for(const [x,out] of outs){out.id=newId();if(x.kind==='inv'){S.inv=out}else if(x.kind==='purch'){S.purch=out}else{S.sales.push(out);rows+=out.rows.length;bad+=out.bad||0}}
     cloudUpload(outs.map(([x,out])=>({x,out,named})));
     S.pending=S.pending.filter(x=>!group.includes(x));
-    toast(p.kind==='inv'?`Loaded ${int(outs[0][1].items.length)} items`:`Loaded ${outs.length} file${outs.length===1?'':'s'}, ${int(rows)} sales rows${bad?` (${int(bad)} rows skipped: unreadable date or quantity)`:''}`);
+    toast(p.kind==='inv'?`Loaded ${int(outs[0][1].items.length)} items`:p.kind==='purch'?`Loaded purchases from ${int(outs[0][1].vendors)} distributors`:`Loaded ${outs.length} file${outs.length===1?'':'s'}, ${int(rows)} sales rows${bad?` (${int(bad)} rows skipped: unreadable date or quantity)`:''}`);
     persist();recompute();renderMapper();
   };
   if(scroll)el.scrollIntoView({behavior:'smooth',block:'start'});
@@ -1468,9 +1548,9 @@ function renderKpis(){
 function goTab(v,flag=''){
   if(v!==S.view){
     resetQuick();
-    S.q='';S.vendor='';S.cat='';S.flag='';$('#q').value='';
+    S.q='';S.vendor=[];S.cat=[];S.flag=[];$('#q').value='';
   }
-  if(flag)S.flag=flag;
+  if(flag)S.flag=[flag];
   S.view=v;S.limit=200;renderTabs();renderFilters();renderView();
 }
 function renderTabs(){
@@ -1486,15 +1566,65 @@ function renderFilters(){
   const r=S.res;const f=$('#filters');
   f.hidden=!r||S.view==='how'||S.view==='deals';
   if(!r)return;
-  const vs=[...new Set(r.results.map(x=>x.it.vendor))].sort(),cs=[...new Set(r.results.map(x=>x.it.category))].sort();
-  if(S.vendor&&!vs.includes(S.vendor))S.vendor='';if(S.cat&&!cs.includes(S.cat))S.cat='';
-  $('#fVendor').innerHTML='<option value="">All distributors</option>'+vs.map(v=>`<option${v===S.vendor?' selected':''}>${esc(v)}</option>`).join('');
-  $('#fCat').innerHTML='<option value="">All departments</option>'+cs.map(v=>`<option${v===S.cat?' selected':''}>${esc(v)}</option>`).join('');
-  $('#fFlag').innerHTML='<option value="">Any status</option>'+Object.entries(FLAG).map(([k,[l]])=>`<option value="${k}"${k===S.flag?' selected':''}>${l}</option>`).join('');
+  const count=f=>{const m=new Map();for(const x of r.results){for(const k of [].concat(f(x)))m.set(k,(m.get(k)||0)+1)}return m};
+  const vc=count(x=>x.it.vendor),cc=count(x=>x.it.category),fc=count(x=>x.flags);
+  const vs=[...vc.keys()].sort((a,b)=>(a===NO_DIST)-(b===NO_DIST)||a.localeCompare(b)),cs=[...cc.keys()].sort();
+  S.vendor=S.vendor.filter(v=>vc.has(v));S.cat=S.cat.filter(v=>cc.has(v));
+  FILTERS.vendor.opts=vs.map(v=>({k:v,label:v,n:vc.get(v)}));
+  FILTERS.cat.opts=cs.map(v=>({k:v,label:v,n:cc.get(v)}));
+  FILTERS.flag.opts=Object.entries(FLAG).map(([k,[l]])=>({k,label:l,n:fc.get(k)||0}));
+  for(const id of Object.keys(FILTERS))renderMsel(id);
+  $('#exportWrap').hidden=!['reorder','all','dead'].includes(S.view);
   $('#btnExportAll').hidden=S.view!=='sheets'&&S.view!=='reorder';
   $('#btnExportAll').textContent=S.view==='reorder'?'Add all shown to order':'Download all orders (CSV)';
   $('#btnClearOrder').hidden=S.view!=='sheets';
 }
+
+/* ---------- multi-select filters: tick any number of distributors, departments or statuses ---------- */
+const FILTERS={
+  vendor:{el:'fVendor',all:'All distributors',one:'distributor',many:'distributors',opts:[]},
+  cat:{el:'fCat',all:'All departments',one:'department',many:'departments',opts:[]},
+  flag:{el:'fFlag',all:'Any status',one:'status',many:'statuses',opts:[]}};
+let openMsel='';
+function mselLabel(id){
+  const f=FILTERS[id],sel=S[id];
+  if(!sel.length)return f.all;
+  if(sel.length===1){const o=f.opts.find(o=>o.k===sel[0]);return o?o.label:sel[0]}
+  return `${sel.length} ${f.many}`;
+}
+function renderMsel(id){
+  const f=FILTERS[id],box=$('#'+f.el),open=openMsel===id;
+  box.dataset.sel=S[id].join('|');
+  box.innerHTML=`<button class="msel-btn${S[id].length?' on':''}" type="button" aria-haspopup="true" aria-expanded="${open}" title="${esc(S[id].length>1?S[id].map(k=>(f.opts.find(o=>o.k===k)||{label:k}).label).join(', '):'Filter by '+f.one)}">${esc(mselLabel(id))} ▾</button><div class="mixpop msel-pop" role="group" aria-label="Filter by ${f.one}"${open?'':' hidden'}></div>`;
+  $('.msel-btn',box).onclick=e=>{e.stopPropagation();const was=openMsel===id;closeMsel();if(!was){openMsel=id;renderMsel(id);const s=$('.msel-pop input[type=search]',box)||$('.msel-pop input',box);if(s)s.focus()}};
+  if(open)renderMselPop(id);
+  $('#fReset').hidden=!Object.keys(FILTERS).some(k=>S[k].length);
+}
+function renderMselPop(id,q=''){
+  const f=FILTERS[id],box=$('#'+f.el),pop=$('.msel-pop',box);
+  const long=f.opts.length>8,ql=q.trim().toLowerCase();
+  const list=f.opts.filter(o=>!ql||o.label.toLowerCase().includes(ql));
+  pop.innerHTML=`<div class="mixpop-head"><b>${esc(f.all.replace(/^(All|Any) /,'').replace(/^./,c=>c.toUpperCase()))}</b><span><button type="button" class="btn ghost small" data-mclear>Clear</button></span></div>`+
+    (long?`<input type="search" placeholder="Find a ${f.one}" aria-label="Find a ${f.one}" value="${esc(q)}">`:'')+
+    `<div class="msel-list">${list.map(o=>`<label class="check"><input type="checkbox" value="${esc(o.k)}"${S[id].includes(o.k)?' checked':''}> <span>${esc(o.label)}</span> <span class="sub">${int(o.n)}</span></label>`).join('')||'<p class="hint">Nothing matches.</p>'}</div>`;
+  pop.onclick=e=>e.stopPropagation();
+  const srch=$('input[type=search]',pop);
+  if(srch)srch.oninput=()=>{renderMselPop(id,srch.value);const s2=$('input[type=search]',pop);s2.focus();s2.setSelectionRange(s2.value.length,s2.value.length)};
+  $$('.msel-list input',pop).forEach(c=>c.onchange=()=>{
+    S[id]=c.checked?[...S[id],c.value]:S[id].filter(v=>v!==c.value);S.limit=200;box.dataset.sel=S[id].join('|');
+    const btn=$('.msel-btn',box);btn.firstChild.textContent=mselLabel(id)+' ▾';btn.classList.toggle('on',S[id].length>0);
+    $('#fReset').hidden=!Object.keys(FILTERS).some(k=>S[k].length);
+    renderView();
+  });
+  $('[data-mclear]',pop).onclick=()=>{S[id]=[];S.limit=200;renderMsel(id);renderView()};
+}
+function closeMsel(focus){
+  const id=openMsel;openMsel='';
+  if(id){renderMsel(id);if(focus)$('.msel-btn',$('#'+FILTERS[id].el)).focus()}
+  const ep=$('#exportPop');if(ep&&!ep.hidden){ep.hidden=true;$('#btnExport').setAttribute('aria-expanded','false');if(focus)$('#btnExport').focus()}
+}
+document.addEventListener('click',()=>closeMsel());
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&(openMsel||!$('#exportPop').hidden))closeMsel(true)});
 
 function th(view,k,label,right){
   const [sk,dir]=S.sort[view];
@@ -1556,11 +1686,8 @@ function renderView(){
   if(!r){el.innerHTML='<div class="tablewrap"><div class="empty">Load your inventory list to see reorder suggestions.</div></div>';return}
   if(S.view==='sheets'){renderTotals(filtered().filter(x=>x.ord>0).map(x=>({...x,units:x.ord,cases:x.ordCases,cost:x.ordCost})),'sheets');renderSheets(el);return}
   if(S.view==='deals'){renderDeals(el);return}
-  let list=filtered();const view=S.view;
-  if(view==='reorder')list=list.filter(isSuggested);
-  if(view==='dead')list=list.filter(x=>x.flags.includes('dead')||x.flags.includes('over'));
+  const view=S.view;let list=viewRows(view);
   renderTotals(list,view);
-  sortRows(list,view);
   // on the Reorder list each QD added from the quick check sits together under its own heading
   const qdGroups=[];
   if(view==='reorder'&&r.qdPlans){
@@ -1596,6 +1723,48 @@ function renderView(){
   const m=$('#btnMore');if(m)m.onclick=()=>{S.limit+=200;renderView()};
 }
 
+// the rows a list view shows, after search and filters, in the order on screen
+function viewRows(view){
+  let list=filtered();
+  if(view==='reorder')list=list.filter(isSuggested);
+  if(view==='dead')list=list.filter(x=>x.flags.includes('dead')||x.flags.includes('over'));
+  return sortRows(list,view);
+}
+/* ---------- export what the list is showing ---------- */
+const VIEW_NAME={reorder:'reorder',all:'all-items',dead:'dead-and-overstock'};
+function exportTable(view){
+  const rows=viewRows(view),T=S.res.ctx.T;
+  const r2=v=>Math.round(v*100)/100,r1=v=>Math.round(v*10)/10;
+  const head=['Item #','UPC','Description','Size','Pack','Department','Distributor','Rank','On hand','On order','Sells / week','Days of supply','Next 30 days','Next 60 days','Next 90 days',
+    'Suggested units','Suggested cases','Units per case','Last cost','Retail price','Margin %','Suggested cost','On your order (units)','Order cost','Last sold','Days since sale','Cash tied up','Status'];
+  const body=rows.map(x=>{const it=x.it;return [it.sku,it.upc,it.name,it.size,it.pack,it.category,it.vendor,x.cls,x.onHand,x.onOrder,r1(x.perWk),isFinite(x.dos)?Math.round(x.dos):'',
+    Math.round(x.f30),Math.round(x.f60),Math.round(x.f90),x.units,x.byCase?x.cases:'',x.pack,it.cost?r2(it.cost):'',it.price?r2(it.price):'',it.cost>0&&it.price>0?Math.round((it.price-it.cost)/it.price*100):'',
+    x.units?r2(x.cost):'',x.ord||'',x.ord?r2(x.ordCost):'',x.lastSale!=null?toIso(x.lastSale):'',x.daysSince??'',x.tied?r2(x.tied):'',x.flags.map(f=>FLAG[f]?FLAG[f][0]:f).join('; ')]});
+  return {head,body,name:`${VIEW_NAME[view]||view}-${toIso(T-1)}`};
+}
+function exportView(fmt){
+  if(!S.res)return;
+  const {head,body,name}=exportTable(S.view);
+  if(!body.length){toast('Nothing to export with the current filters');return}
+  if(fmt==='xlsx'){
+    if(!window.XLSX){toast('The Excel writer didn’t load. Use CSV instead.');return}
+    const ws=XLSX.utils.aoa_to_sheet([head,...body]);
+    ws['!cols']=head.map((h,i)=>({wch:i===2?40:Math.max(8,Math.min(24,h.length+2))}));
+    ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:body.length,c:head.length-1}})};
+    const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Items');
+    saveFile(name+'.xlsx',XLSX.write(wb,{bookType:'xlsx',type:'array'}));
+  }else{
+    const q=v=>{const t=String(v??'');return /[",\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t};
+    saveFile(name+'.csv',[head,...body].map(r=>r.map(q).join(',')).join('\n'));
+  }
+}
+function renderExportPop(){
+  const n=S.res?viewRows(S.view).length:0,pop=$('#exportPop');
+  pop.innerHTML=`<div class="mixpop-head"><b>Export ${int(n)} item${n===1?'':'s'}</b></div><p class="hint" style="margin:0">Everything the list shows with your search and filters, not just the first page.</p>
+    <button class="btn small" type="button" data-exp="xlsx">Excel (.xlsx)</button><button class="btn small" type="button" data-exp="csv">CSV (.csv)</button>`;
+  pop.onclick=e=>e.stopPropagation();
+  $$('[data-exp]',pop).forEach(b=>b.onclick=()=>{closeMsel();exportView(b.dataset.exp)});
+}
 const isSuggested=x=>x.units>0||x.ord>0||(x.flags.includes('oos')&&!x.held);
 const reorderList=()=>filtered().filter(isSuggested);
 function orderGroups(){
@@ -1650,15 +1819,17 @@ function toCsv(groups){
   }
   return lines.join('\n');
 }
+// text, or the bytes of an Excel file
 async function saveFile(name,text){
   try{
     const dl=await dlP;
     if(dl){await dl.save({filename:name,data:text});toast('Saved '+name);return}
   }catch(e){if(e&&e.code==='declined')return;if(e&&e.code&&e.code!=='unavailable'&&e.code!=='not_granted'){toast('Couldn’t save the file. Use Copy instead.');return}}
   try{
-    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'}));a.download=name;document.body.appendChild(a);a.click();a.remove();
+    const type=/\.xlsx$/.test(name)?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'text/csv';
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href),4000);
-  }catch(e){copyText(text)}
+  }catch(e){if(typeof text==='string')copyText(text);else toast('Couldn’t save the file.')}
 }
 function copyText(text){
   const fallback=()=>{openPanel(`<div class="drawer-head"><h2>Copy order</h2><button class="btn ghost" data-close type="button">Close</button></div><p class="hint">Select all and copy, then paste into an email or spreadsheet.</p><textarea class="copy" id="copyBox" readonly>${esc(text)}</textarea>`);const t=$('#copyBox');t.focus();t.select()};
@@ -2217,12 +2388,14 @@ function openDetail(key){
       <div class="fact"><div class="k">Next 30 / 60 / 90</div><div class="v">${int(r.f30)} / ${int(r.f60)} / ${int(r.f90)}</div></div>
     </div>
     <div class="facts">
-      <div class="fact"><div class="k">Last cost</div><div class="v">${it.cost>0?money2(it.cost):'—'}</div>${it.cost>0&&r.byCase?`<div class="sub">${money2(it.cost*r.pack)} a case of ${r.pack}</div>`:''}</div>
+      <div class="fact"><div class="k">Last cost</div><div class="v">${it.cost>0?money2(it.cost):'—'}</div>${it.cost>0&&r.byCase?`<div class="sub" title="A case of ${r.pack}">${money2(it.cost*r.pack)} / case</div>`:''}</div>
       <div class="fact"><div class="k">Retail price</div><div class="v">${it.price>0?money2(it.price):'—'}</div></div>
       <div class="fact"><div class="k">Margin</div><div class="v">${it.cost>0&&it.price>0?`${Math.round((it.price-it.cost)/it.price*100)}%`:'—'}</div></div>
       <div class="fact"><div class="k">On-hand value</div><div class="v">${it.cost>0?money2(Math.max(0,r.onHand)*it.cost):'—'}</div></div>
     </div>
-    ${it.cost>0?'':'<p class="hint">No cost for this item in the Item List file, so order totals leave it out. Add the cost in Advent and export the list again.</p>'}
+    ${it.cost>0?(it.costSrc==='purch'?`<p class="hint">The Item List has no cost for this item, so the cost is the average you paid ${esc(it.buys[0].vendor)}.</p>`:''):'<p class="hint">No cost for this item in the Item List file, so order totals leave it out. Add the cost in Advent and export the list again.</p>'}
+    ${it.buys?`<div><div class="label" style="margin-bottom:6px">Bought from</div><div class="tablewrap"><table class="items plain buys"><thead><tr><th>Distributor</th><th class="r">Units received</th><th class="r">Avg price paid</th><th class="r">Total</th></tr></thead><tbody>${(()=>{const best=Math.min(...it.buys.filter(b=>b.avg>0).map(b=>b.avg));return it.buys.map(b=>`<tr><td>${esc(b.vendor)}${b.vendor===it.vendor?' <span class="chip acc">ordering from</span>':''}${it.buys.length>1&&b.avg>0&&b.avg===best?' <span class="chip ok">lowest price</span>':''}</td><td class="r">${int(b.qty)}</td><td class="r">${b.avg>0?money2(b.avg):'—'}</td><td class="r">${b.total>0?money2(b.total):'—'}</td></tr>`).join('')})()}</tbody></table></div>
+      <p class="hint" style="margin-top:6px">From the Item Purchase By Vendor report.${it.vsrc==='purch'?' The distributor you bought the most from is used for orders; change it below.':''}${it.cost>0&&it.buys[0].avg>0&&it.costSrc!=='purch'&&Math.abs(it.buys[0].avg-it.cost)/it.cost>.1?` The average you paid (${money2(it.buys[0].avg)}) differs from the last cost by ${Math.round(Math.abs(it.buys[0].avg-it.cost)/it.cost*100)}%.`:''}</p></div>`:''}
     <div class="row order-row">${r.ord>0?`<span class="on-order">✓ ${qtyShort(r,r.ord)} on your order${r.qdId?' (in a QD)':''}</span><button class="btn small ghost" id="dOff" type="button">Take off the order</button>`:r.held?'<span class="hint">Suppressed: won’t be suggested. Untick “Suppress” below to bring it back.</span>':`<button class="btn primary" id="dAdd" type="button">Add ${qtyShort(r,r.units>0?r.units:stepOf(r))} to your order</button>${r.units>0?'<span class="hint">the suggested amount; change it on the order sheet</span>':''}`}</div>
     <div><div class="legend"><span><i class="sw" style="background:var(--bar)"></i>Sold per week</span><span><i class="sw" style="background:var(--bar-fore)"></i>Forecast</span><span><i class="sw" style="background:repeating-linear-gradient(45deg,var(--crit) 0 1.5px,var(--crit-soft) 1.5px 4px)"></i>Out of stock, ignored</span></div>
     <div class="chart" id="chart"></div></div>
@@ -2382,6 +2555,7 @@ function howHtml(){
   <section><h3>What to export from Advent</h3>
     <p><b>Inventory:</b> the <i>Item List Report</i>, exported fresh each time you plan an order. It has on-hand counts, cost, size and department.</p>
     <p><b>Sales:</b> the <i>Departmentwise Item Sales</i> report, one export per week (for example Monday to Sunday), going back two years. Each file is a total per item with no dates inside, so the planner asks which week each file covers. Put the dates in the file name, like <span class="mono">sales 2025-10-06 to 2025-10-12.csv</span>, and they fill in on their own. Or use “Fill down as weekly” after entering the first week.</p>
+    <p><b>Distributors (optional):</b> the <i>Item Purchase By Vendor</i> report. Each item gets the distributor you received the most units from, and its details show every distributor you bought it from with the average price paid, so you can see who was cheaper. Items with no cost in the Item List use the average price paid. A distributor you pick for an item, or a distributor column in the Item List, always wins. Export it again now and then to pick up new items.</p>
     <p>Don’t also load the <i>Hourly Item Sales</i> report for the same week. It holds the same sales and would count them twice.</p>
     <p>Loaded files stay in this browser, so after the first big load you only add the newest week plus a fresh Item List.</p></section>
   <section><h3>Selling rate</h3>
@@ -2419,7 +2593,7 @@ function recompute(){compute();renderAll()}
 function bindDrop(el,input,kind){
   el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('drag')});
   el.addEventListener('dragleave',()=>el.classList.remove('drag'));
-  el.addEventListener('drop',e=>{e.preventDefault();el.classList.remove('drag');const f=[...e.dataTransfer.files];if(f.length)queueFiles(kind==='inv'?f.slice(0,1):f,kind)});
+  el.addEventListener('drop',e=>{e.preventDefault();el.classList.remove('drag');const f=[...e.dataTransfer.files];if(f.length)queueFiles(kind==='sales'?f:f.slice(0,1),kind)});
   input.onchange=()=>{const f=[...input.files];input.value='';if(f.length)queueFiles(f,kind)};
 }
 $('#btnInv').onclick=()=>$('#fileInv').click();
@@ -2433,18 +2607,24 @@ $('#btnClearSales').onclick=()=>{
 };
 bindDrop($('#srcInv'),$('#fileInv'),'inv');
 bindDrop($('#srcSales'),$('#fileSales'),'sales');
+bindDrop($('#srcPurch'),$('#filePurch'),'purch');
+$('#btnPurch').onclick=()=>$('#filePurch').click();
+$('#btnClearPurch').onclick=()=>{
+  const was=S.purch;if(!was)return;
+  S.purch=null;persist();recompute();manifestOp({clearPurchases:true});
+  toast('Removed the distributor file. Items go back to your own or department distributors.',cloud.on?null:{label:'Undo',fn:()=>{S.purch=was;persist();recompute()}});
+};
 $('#salesFiles').addEventListener('click',e=>{const b=e.target.closest('[data-rm]');if(!b)return;const [f]=S.sales.splice(+b.dataset.rm,1);persist();recompute();if(f&&f.id)manifestOp({removeSales:[f.id]})});
 $('#btnSettings').onclick=openSettings;
 $('#q').oninput=e=>{S.q=e.target.value;S.limit=200;renderView()};
-$('#fVendor').onchange=e=>{S.vendor=e.target.value;S.limit=200;renderView()};
-$('#fCat').onchange=e=>{S.cat=e.target.value;S.limit=200;renderView()};
-$('#fFlag').onchange=e=>{S.flag=e.target.value;S.limit=200;renderView()};
+$('#btnExport').onclick=e=>{e.stopPropagation();const p=$('#exportPop'),open=p.hidden;closeMsel();if(open){renderExportPop();p.hidden=false;$('#btnExport').setAttribute('aria-expanded','true');$('[data-exp]',p).focus()}};
+$('#fReset').onclick=()=>{S.vendor=[];S.cat=[];S.flag=[];S.limit=200;closeMsel();renderFilters();renderView()};
 let clearArmed=false;
 $('#btnClear').onclick=()=>{
   const b=$('#btnClear');
   if(!clearArmed){clearArmed=true;b.textContent='Click again to clear your files from this browser';setTimeout(()=>{clearArmed=false;b.textContent='Clear loaded data'},5000);return}
   clearArmed=false;b.textContent='Clear loaded data';
-  idb.set('data',null);manifestOp({clearAll:true});cart={};saveCartForce();const s=makeSample();S.sample=true;S.inv=s.inv;S.sales=s.sales;S.showAllFiles=false;resetQuick();recompute();seedSampleCart();toast('Cleared. Showing the sample store.');
+  idb.set('data',null);manifestOp({clearAll:true});cart={};saveCartForce();S.purch=null;const s=makeSample();S.sample=true;S.inv=s.inv;S.sales=s.sales;S.showAllFiles=false;resetQuick();recompute();seedSampleCart();toast('Cleared. Showing the sample store.');
 };
 $('#btnExportAll').onclick=()=>{
   if(S.view==='reorder'){
@@ -2473,7 +2653,9 @@ seedSampleCart();
 (async()=>{
   if(await cloudInit()){resetQuick();recompute();if(S.sample)seedSampleCart();return}
   const saved=await idb.get('data');
-  if(!saved||!S.sample||S.pending.length||(!saved.inv&&!(saved.sales||[]).length))return;
+  if(!saved||!S.sample||S.pending.length)return;
+  if(saved.purch)S.purch=saved.purch;
+  if(!saved.inv&&!(saved.sales||[]).length){if(saved.purch)recompute();return}
   S.sample=false;S.inv=saved.inv;S.sales=saved.sales||[];resetQuick();recompute();
   toast('Loaded your saved files from this browser');
 })();

@@ -1,10 +1,10 @@
 // Shared helpers for the storage API. Everything lives in one R2 bucket (binding DATA):
-//   manifest.json          which uploaded files are current (item list + weekly sales)
+//   manifest.json          which uploaded files are current (item list, distributor file, weekly sales)
 //   files/<id>             each uploaded file, gzipped
 //   state/<name>.json      shared maps: the order, QDs, saved deals, settings, adjustments
 
 export const MAPS = ['settings', 'vendors', 'overrides', 'depts', 'deals', 'qdorders', 'cart'];
-export const EMPTY_MANIFEST = { inventory: null, sales: [] };
+export const EMPTY_MANIFEST = { inventory: null, purchases: null, sales: [] };
 
 export function json(data, status = 200) {
   return new Response(JSON.stringify(data), {

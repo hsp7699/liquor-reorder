@@ -66,17 +66,19 @@ export async function putFile({ request, env, params, user }) {
 
 // POST /api/manifest with one change to which files are current:
 //   {setInventory: meta}      replace the item list
+//   {setPurchases: meta}      replace the distributor file (Item Purchase By Vendor)
+//   {clearPurchases: true}    remove the distributor file
 //   {addSales: [meta, ...]}   add weekly sales files
 //   {removeSales: [id, ...]}  remove some sales files
 //   {clearSales: true}        remove every sales file
-//   {clearAll: true}          remove the item list and every sales file
+//   {clearAll: true}          remove the item list, the distributor file and every sales file
 // Files that drop out of the list are deleted from storage after the list is saved.
 function cleanMeta(m, user) {
   if (!m || !validId(m.id)) throw new Error('bad file entry');
   const num = (v) => (v === null || v === undefined || v === '' ? null : Number.isFinite(+v) ? +v : null);
   return {
     id: m.id,
-    kind: m.kind === 'inv' ? 'inv' : 'sales',
+    kind: m.kind === 'inv' || m.kind === 'purch' ? m.kind : 'sales',
     type: m.type === 'parsed' ? 'parsed' : 'raw',
     fileName: String(m.fileName || 'file').slice(0, 240),
     headerIdx: num(m.headerIdx) ?? 0,
@@ -100,16 +102,24 @@ export async function changeManifest({ request, env, user }) {
   try {
     const metas = {
       inv: op.setInventory ? cleanMeta(op.setInventory, user) : null,
+      purch: op.setPurchases ? cleanMeta(op.setPurchases, user) : null,
       sales: Array.isArray(op.addSales) ? op.addSales.slice(0, 600).map((m) => cleanMeta(m, user)) : [],
     };
     manifest = await update(env, 'manifest.json', EMPTY_MANIFEST, (cur) => {
       removed.clear();
       cur.sales = Array.isArray(cur.sales) ? cur.sales : [];
+      cur.purchases = cur.purchases || null;
       if (op.clearAll) {
         if (cur.inventory) removed.add(cur.inventory.id);
+        if (cur.purchases) removed.add(cur.purchases.id);
         cur.sales.forEach((f) => removed.add(f.id));
         cur.inventory = null;
+        cur.purchases = null;
         cur.sales = [];
+      }
+      if (op.clearPurchases && cur.purchases) {
+        removed.add(cur.purchases.id);
+        cur.purchases = null;
       }
       if (op.clearSales) {
         cur.sales.forEach((f) => removed.add(f.id));
@@ -122,6 +132,10 @@ export async function changeManifest({ request, env, user }) {
       if (metas.inv) {
         if (cur.inventory && cur.inventory.id !== metas.inv.id) removed.add(cur.inventory.id);
         cur.inventory = metas.inv;
+      }
+      if (metas.purch) {
+        if (cur.purchases && cur.purchases.id !== metas.purch.id) removed.add(cur.purchases.id);
+        cur.purchases = metas.purch;
       }
       if (metas.sales.length) {
         const have = new Set(cur.sales.map((f) => f.id));
