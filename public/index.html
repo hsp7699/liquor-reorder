@@ -346,7 +346,7 @@ const store={get(k,d){try{const v=localStorage.getItem('lrp.'+k);return v?JSON.p
 const dlP=(window.claude&&window.claude.use)?window.claude.use('downloads').catch(()=>null):Promise.resolve(null);
 
 /* ---------- settings ---------- */
-const DEFAULTS={svcA:98,svcB:95,svcC:90,overstockDays:120,deadDays:90,roundUp:30,defaultPack:1,useSeason:true,estPack:true,holdRate:20};
+const DEFAULTS={svcA:98,svcB:95,svcC:90,overstockDays:120,deadDays:90,roundUp:30,defaultPack:1,useSeason:true,estPack:true,holdRate:20,rateSpeed:'normal'};
 const VDEF={lead:3,cycle:7,min:0,by:'case'};
 const NO_DIST='No distributor set';
 let settings=Object.assign({},DEFAULTS,store.get('settings',{}));
@@ -989,7 +989,10 @@ function compute(){
     const key=cat+'|'+off+'|'+H;if(cache.has(key))return cache.get(key);
     let arr=catArr.get(cat)||tot;const a0=N-365;
     if(sum(arr,a0-91,a0)<60)arr=tot;
-    const b=.6*sum(arr,a0-28,a0)/28+.4*sum(arr,a0-91,a0)/91;
+    // last year's pace going into this time of year, weighted the same way as each item's rate
+    const lam=Math.pow(.5,1/rateHalf());let num=0,den=0;
+    for(let j=0;j<26;j++){const e=a0-7*j;if(e-7<0)break;const w=Math.pow(lam,j);num+=w*sum(arr,e-7,e)/7;den+=w}
+    const b=den?num/den:0;
     const fwd=sum(arr,a0+off,a0+off+H)/H;
     const f=b>0?Math.min(2.5,Math.max(.5,fwd/b)):1;
     cache.set(key,f);return f;
@@ -1171,6 +1174,24 @@ function applyDeals(){
   }
 }
 
+// selling rate: how zero weeks and spikes are treated, and how fast the rate follows recent weeks
+// (tested on two years of the store's weekly sales: a 3-week half-life missed least)
+const RATE={zeroMin:2.5,minSell:4,share:.5,maxGap:4,cap:2.5,speeds:{fast:2,normal:3,steady:6}};
+const rateHalf=()=>RATE.speeds[settings.rateSpeed]||RATE.speeds.normal;
+function ewma(pairs,h){
+  if(!pairs.length)return null;
+  const lam=Math.pow(.5,1/h);let num=0,den=0;
+  for(const [age,x] of pairs){const w=Math.pow(lam,age);num+=x*w;den+=w}
+  return num/den;
+}
+// one line explaining where the selling rate came from
+function rateBasis(r){
+  if(!r.cleanWks)return 'not enough sales history';
+  const p=[`weighted average of the last ${r.cleanWks} in-stock week${r.cleanWks===1?'':'s'}, newest count most`];
+  if(r.oosWk.length)p.push(`${r.oosWk.length} out-of-stock week${r.oosWk.length===1?'':'s'} ignored`);
+  if(r.spikes)p.push(`${r.spikes} unusually big week${r.spikes===1?'':'s'} capped`);
+  return p.join(' · ');
+}
 function forecastItem(it,ctx){
   const ov=getOv(it.key),vc=vendorOf(it.vendor),{T}=ctx;
   let start=ctx.minDay;
@@ -1197,18 +1218,44 @@ function forecastItem(it,ctx){
   }
   const excDays=ranges.reduce((s,r)=>s+r[1]-r[0]+1,0);
   const win=W=>{let s=0,c=0;for(let i=Math.max(0,n-W);i<n;i++)if(!exc[i]){s+=arr[i];c++}return c>=Math.min(7,W)?{r:s/c,c}:null};
-  const w28=win(28),w91=win(91),w365=win(365);
-  const blend=parts=>{let s=0,w=0;for(const [x,wt] of parts)if(x){s+=x.r*wt;w+=wt}return w?s/w:null};
+  const w28=win(28),w91=win(91),w365=win(365);   // plain averages, shown for reference
+  // weekly totals for the last 52 weeks, newest first (week j ends j weeks before the cut-off);
+  // null = a week that was mostly out of stock by the day-level check above
+  const wks=[];
+  for(let j=0;j<52;j++){const b=n-7*j,a=b-7;if(a<0)break;let s=0,c=0;for(let i=a;i<b;i++)if(!exc[i]){s+=arr[i];c++}wks.push(c>=4?s*7/c:null)}
+  // a typical week for this item: the median of the weeks it sold anything (last 26 weeks if it sold in
+  // at least 4 of them), known only once there are 4 selling weeks to go on
+  const med=v=>{const x=v.slice().sort((a,b)=>a-b),h=x.length>>1;return x.length%2?x[h]:(x[h-1]+x[h])/2};
+  const recent=wks.slice(0,26).filter(v=>v!=null),nz=recent.filter(v=>v>0),nzAll=wks.filter(v=>v>0);
+  const typSet=nz.length>=RATE.minSell?nz:nzAll.length>=RATE.minSell?nzAll:null;
+  const typ=typSet?med(typSet):0;
+  // only a regular seller's zero weeks can be stockouts: 2.5+ a week, selling in at least half the weeks
+  const regular=typ>=RATE.zeroMin&&recent.length>0&&nz.length/recent.length>=RATE.share;
+  // length of the run of zero weeks each week sits in (runs reaching today are marked as trailing)
+  const run=new Array(wks.length).fill(0);let trail=0;
+  for(let j=0;j<wks.length;){if(wks[j]!==0){j++;continue}let e=j;while(e<wks.length&&wks[e]===0)e++;for(let k=j;k<e;k++)run[k]=e-j;if(j===0)trail=e;j=e}
+  // keep only in-stock weeks: a gap of up to 4 zero weeks from a regular seller is a stockout. Longer gaps
+  // are a real change (season over, item dropped) and stay in. Zero weeks right up to today only count as
+  // a stockout when nothing is on hand now. One-off spikes (a party order) count as 2.5 typical weeks.
+  const clean=[],oosWk=[];let spikes=0;
+  wks.forEach((v,j)=>{
+    if(v==null){oosWk.push(j);return}
+    if(v===0&&regular&&run[j]<=RATE.maxGap&&(j>=trail||it.onHand<=0)){oosWk.push(j);return}
+    let x=v;if(typ>0&&x>RATE.cap*typ){x=RATE.cap*typ;spikes++}
+    clean.push([j,x,v]);
+  });
+  // recency-weighted average: a week counts half as much as one `half` weeks newer
+  const half=rateHalf();
+  let raw=ewma(clean,half);
+  if(raw==null)raw=n>=3&&n<7?arr.reduce((x,y)=>x+y,0)/n*7:0;   // brand new: under a week of sales
+  raw/=7;
   const seasonal=ctx.seasonOK;
-  let raw=seasonal?blend([[w28,.6],[w91,.4]]):blend([[w28,.5],[w91,.3],[w365,.2]]);
-  if(raw==null)raw=w365?w365.r:0;
   const adj=+ov.adj||0;
   const base=Math.max(0,raw*(1+adj/100));
   const Sf=(off,H)=>seasonal?ctx.season(it.category,off,H):1;
   const s30=Sf(0,30),s60=Sf(0,60),s90=Sf(0,90);
   // week-to-week variability over the last 26 clean weeks
-  const wk=[];
-  for(let w=0;w<26;w++){const b=n-7*w,a=b-7;if(a<0)break;let s=0,bad=false;for(let i=a;i<b;i++){if(exc[i]){bad=true;break}s+=arr[i]}if(!bad)wk.push(s)}
+  const wk=clean.filter(c=>c[0]<26).map(c=>c[2]);
   let sigmaD;
   if(wk.length>=6){const m=wk.reduce((x,y)=>x+y,0)/wk.length;sigmaD=Math.sqrt(wk.reduce((x,y)=>x+(y-m)**2,0)/(wk.length-1))/Math.sqrt(7)}
   else sigmaD=Math.sqrt(Math.max(base,.02))*1.2;
@@ -1252,12 +1299,12 @@ function forecastItem(it,ctx){
   const dead=ctx.hasSales&&onHand>0&&histDays>=settings.deadDays&&(daysSince==null||daysSince>=settings.deadDays);
   if(dead)flags.push('dead');
   else if(onHand>0&&dos>settings.overstockDays)flags.push('over');
-  if(ranges.length)flags.push('fixed');
+  if(ranges.length||oosWk.length)flags.push('fixed');
   if(it.spread)flags.push('spread');
   const overUnits=flags.includes('over')?Math.max(0,onHand-daily30*settings.overstockDays):0;
   const tied=dead?onHand*it.cost:overUnits*it.cost;
   const urg=flags.includes('oos')?0:flags.includes('risk')?1:units>0?2:3;
-  return {key:it.key,it,cls:it.cls,start,n,arr,exc,ranges,excDays,w28,w91,w365,raw,adj,base,s30,s60,s90,sP,
+  return {key:it.key,it,cls:it.cls,start,n,arr,exc,ranges,excDays,w28,w91,w365,raw,typ,oosWk,spikes,cleanWks:clean.length,half,adj,base,s30,s60,s90,sP,
     f30:base*s30*30,f60:base*s60*60,f90:base*s90*90,perWk:daily30*7,sigmaD,z,svc,L,R,P,demandP,demandL,ss,target,
     onHand,onOrder,position,need,pack,packSrc,byCase,cases,units,cost:units*it.cost,held,dos,lastSale,daysSince,flags,tied,overUnits,urg,seasonal};
 }
@@ -1266,7 +1313,7 @@ function forecastItem(it,ctx){
 const FLAG={
   onorder:['On your order','acc'],
   oos:['Out of stock','crit'],risk:['Runs out before delivery','warn'],count:['Negative count','crit'],hold:['Suppressed','idle'],
-  qd:['Quantity deal','ok'],new:['New item','acc'],dead:['No recent sales','idle'],over:['Overstocked','idle'],fixed:['Stockout days ignored','idle'],spread:['Period totals','idle']};
+  qd:['Quantity deal','ok'],new:['New item','acc'],dead:['No recent sales','idle'],over:['Overstocked','idle'],fixed:['Stockouts ignored','idle'],spread:['Period totals','idle']};
 const chips=(r,skip=[])=>'<div class="chips">'+r.flags.filter(f=>!skip.includes(f)).map(f=>`<span class="chip ${FLAG[f][1]}">${FLAG[f][0]}</span>`).join('')+'</div>';
 const dosTxt=d=>!isFinite(d)?'—':d>=999?'999+':int(d);
 
@@ -1788,7 +1835,7 @@ function renderQuickOut(){
   const anyManual=Object.keys(q.manual).length>0,onOrder=qdList().length;
   const body=m.rows.map((x,i)=>{
     const r=x.r,u=m.units[i],st=stepOf(r),added=q.extra.includes(r.key)&&!m.auto.includes(r.key),rv=q.review[r.key],why=q.why[r.key];
-    return `<tr data-qk="${esc(r.key)}" title="Click for details"${rv?' class="needs-review"':''}><td><div class="nm">${esc(r.it.name)}${added?` <span class="chip acc">added</span> <button class="x" type="button" data-qrm="${esc(r.key)}" aria-label="Remove ${esc(r.it.name)}">×</button>`:''}</div><div class="sub">${esc([r.it.size,r.it.pack,r.it.sku?'#'+r.it.sku:'',r.it.category].filter(Boolean).join(' · '))}</div>${rv?`<div class="why" data-why="${esc(r.key)}"><span>${esc(rv)}</span> <button class="btn small" type="button" data-ok="${esc(r.key)}">Looks right</button></div>`:why?`<div class="why ok">${esc(why)}</div>`:''}</td><td class="r">${dec1(r.perWk)}</td><td class="r">${int(r.onHand)}</td><td class="r">${qtyTxt(r,x.normal)}</td>
+    return `<tr data-qk="${esc(r.key)}" title="Click for details"${rv?' class="needs-review"':''}><td><div class="nm">${esc(r.it.name)}${added?` <span class="chip acc">added</span> <button class="x" type="button" data-qrm="${esc(r.key)}" aria-label="Remove ${esc(r.it.name)}">×</button>`:''}</div><div class="sub">${esc([r.it.size,r.it.pack,r.it.sku?'#'+r.it.sku:'',r.it.category].filter(Boolean).join(' · '))}</div>${rv?`<div class="why" data-why="${esc(r.key)}"><span>${esc(rv)}</span> <button class="btn small" type="button" data-ok="${esc(r.key)}">Looks right</button></div>`:why?`<div class="why ok">${esc(why)}</div>`:''}</td><td class="r" title="${esc(rateBasis(r))}">${dec1(r.perWk)}${r.oosWk.length?`<div class="sub">${r.oosWk.length} out-of-stock wk${r.oosWk.length===1?'':'s'} skipped</div>`:''}</td><td class="r">${int(r.onHand)}</td><td class="r">${qtyTxt(r,x.normal)}</td>
       <td class="r"><div class="stepper${x.locked?' set':''}"><button type="button" data-step="-1" data-k="${esc(r.key)}" aria-label="One less ${r.byCase?'case':'unit'} of ${esc(r.it.name)}">−</button><input type="number" min="0" step="1" inputmode="numeric" data-qv="${esc(r.key)}" value="${u/st}" aria-label="${r.byCase?'Cases':'Units'} of ${esc(quickLabel(r))}"><button type="button" data-step="1" data-k="${esc(r.key)}" aria-label="One more ${r.byCase?'case':'unit'} of ${esc(r.it.name)}">+</button></div><div class="sub" data-qu="${esc(r.key)}">${r.byCase?`cs of ${r.pack} = ${int(u)}`:'units'}</div></td>
       <td class="r" data-qd="${esc(r.key)}">${daysTxt(x,u)}</td></tr>`;
   }).join('');
@@ -1892,7 +1939,7 @@ async function suggestOrder(){
   const lines=m.rows.map((x,i)=>{
     const r=x.r,id='i'+(i+1);ids.set(id,x);
     const unit=r.byCase?`case of ${r.pack}`:'unit',per=q.countIn==='case'?(r.byCase?'1 per case':`1/${r.pack} per unit`):(r.byCase?`${r.pack} per case`:'1 per unit');
-    return `${id} | ${r.it.name} | ${r.it.size||'-'} ${r.it.pack||''} | ${r.it.category} | last 4 wks ${r.w28?dec1(r.w28.r*7):'-'}/wk, last 13 wks ${r.w91?dec1(r.w91.r*7):'-'}/wk | on hand ${int(r.onHand)} | cost $${r.it.cost.toFixed(2)} | order unit: ${unit} | counts toward QD: ${per} | normal order ${x.normal/stepOf(r)} | planner suggests ${m.units[i]/stepOf(r)} (${x.rate>0?int((x.pos+m.units[i])/x.rate)+' days of stock after':'no sales'})${flags[r.key]?' | planner check: '+flags[r.key]:''}`;
+    return `${id} | ${r.it.name} | ${r.it.size||'-'} ${r.it.pack||''} | ${r.it.category} | selling rate ${dec1(r.base*7)}/wk (${rateBasis(r)}) | plain average last 4 wks ${r.w28?dec1(r.w28.r*7):'-'}/wk, last 13 wks ${r.w91?dec1(r.w91.r*7):'-'}/wk | on hand ${int(r.onHand)} | cost $${r.it.cost.toFixed(2)} | order unit: ${unit} | counts toward QD: ${per} | normal order ${x.normal/stepOf(r)} | planner suggests ${m.units[i]/stepOf(r)} (${x.rate>0?int((x.pos+m.units[i])/x.rate)+' days of stock after':'no sales'})${flags[r.key]?' | planner check: '+flags[r.key]:''}`;
   }).join('\n');
   const prompt=`You are helping a liquor store owner fill a distributor quantity deal (QD) order.
 
@@ -2165,7 +2212,8 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#overlay').hidd
 function openDetail(key){
   const r=S.res&&S.res.byKey.get(key);if(!r)return;
   const it=r.it,ov=getOv(key),T=S.res.ctx.T;
-  const rateLine=[r.w28&&`28 days: ${dec1(r.w28.r*7)}/wk`,r.w91&&`91 days: ${dec1(r.w91.r*7)}/wk`,!r.seasonal&&r.w365&&`365 days: ${dec1(r.w365.r*7)}/wk`].filter(Boolean).join(' · ');
+  const plain=[r.w28&&`last 4 wks ${dec1(r.w28.r*7)}`,r.w91&&`last 13 wks ${dec1(r.w91.r*7)}`].filter(Boolean).join(', ');
+  const rateLine=rateBasis(r)+(plain&&r.cleanWks?` (plain average: ${plain})`:'');
   const runOut=isFinite(r.dos)&&r.base>0?fmtDay(T+Math.floor(r.dos)):'—';
   const orderTxt=r.units?(r.byCase?`${r.cases} case${r.cases===1?'':'s'} × ${r.pack} = ${int(r.units)} units`:`${int(r.units)} units`):(r.held?'Suppressed (your setting)':r.base<=0?'No recent sales':'Nothing needed');
   const d=openPanel(`
@@ -2177,6 +2225,13 @@ function openDetail(key){
       <div class="fact"><div class="k">Runs out</div><div class="v">${runOut}</div></div>
       <div class="fact"><div class="k">Next 30 / 60 / 90</div><div class="v">${int(r.f30)} / ${int(r.f60)} / ${int(r.f90)}</div></div>
     </div>
+    <div class="facts">
+      <div class="fact"><div class="k">Last cost</div><div class="v">${it.cost>0?money2(it.cost):'—'}</div>${it.cost>0&&r.byCase?`<div class="sub">${money2(it.cost*r.pack)} a case of ${r.pack}</div>`:''}</div>
+      <div class="fact"><div class="k">Retail price</div><div class="v">${it.price>0?money2(it.price):'—'}</div></div>
+      <div class="fact"><div class="k">Margin</div><div class="v">${it.cost>0&&it.price>0?`${Math.round((it.price-it.cost)/it.price*100)}%`:'—'}</div></div>
+      <div class="fact"><div class="k">On-hand value</div><div class="v">${it.cost>0?money2(Math.max(0,r.onHand)*it.cost):'—'}</div></div>
+    </div>
+    ${it.cost>0?'':'<p class="hint">No cost for this item in the Item List file, so order totals leave it out. Add the cost in Advent and export the list again.</p>'}
     <div class="row order-row">${r.ord>0?`<span class="on-order">✓ ${qtyShort(r,r.ord)} on your order${r.qdId?' (in a QD)':''}</span><button class="btn small ghost" id="dOff" type="button">Take off the order</button>`:r.held?'<span class="hint">Suppressed: won’t be suggested. Untick “Suppress” below to bring it back.</span>':`<button class="btn primary" id="dAdd" type="button">Add ${qtyShort(r,r.units>0?r.units:stepOf(r))} to your order</button>${r.units>0?'<span class="hint">the suggested amount; change it on the order sheet</span>':''}`}</div>
     <div><div class="legend"><span><i class="sw" style="background:var(--bar)"></i>Sold per week</span><span><i class="sw" style="background:var(--bar-fore)"></i>Forecast</span><span><i class="sw" style="background:repeating-linear-gradient(45deg,var(--crit) 0 1.5px,var(--crit-soft) 1.5px 4px)"></i>Out of stock, ignored</span></div>
     <div class="chart" id="chart"></div></div>
@@ -2184,6 +2239,7 @@ function openDetail(key){
     <div class="math">
       <div class="mk">Selling rate<small>${rateLine||'not enough sales history'}${r.adj?` · your adjustment ${r.adj>0?'+':''}${r.adj}%`:''}</small></div><div class="mv">${dec1(r.base*7)}/wk</div>
       ${r.seasonal?`<div class="mk">Season factor, next 30 days<small>${esc(it.category)} sales this time last year vs. the weeks before</small></div><div class="mv">×${r.s30.toFixed(2)}</div>`:''}
+      ${!r.excDays&&r.oosWk.length?`<div class="mk">Out-of-stock weeks ignored<small>Weeks with no sales from an item that usually sells ${dec1(r.typ)} a week: ${r.oosWk.slice(0,3).map(j=>'week of '+fmtDayShort(T-7*(j+1))).join(', ')}${r.oosWk.length>3?'…':''}</small></div><div class="mv">${r.oosWk.length} wk${r.oosWk.length===1?'':'s'}</div>`:''}
       ${r.excDays?`<div class="mk">Out-of-stock days ignored<small>${r.ranges.slice(-3).map(x=>fmtDayShort(x[0])+' – '+fmtDayShort(x[1])).join(', ')}</small></div><div class="mv">${int(r.excDays)} days</div>`:''}
       <div class="mk">Expected sales until the next delivery after this one<small>${r.L} day lead time + ${r.R} day order cycle</small></div><div class="mv">${dec1(r.demandP)}</div>
       <div class="mk">Safety stock<small>${r.svc}% in-stock target for ${r.cls} items</small></div><div class="mv">+ ${dec1(r.ss)}</div>
@@ -2233,7 +2289,7 @@ function drawChart(el,r){
   for(let k=51;k>=0;k--){
     const b=T-7*k,a=b-7;let s=0,ex=0,have=0;
     for(let d=a;d<b;d++){const i=d-r.start;if(i<0||i>=r.n)continue;have++;s+=r.arr[i];if(r.exc[i])ex++}
-    bars.push({a,v:have?s:null,oos:ex>=3,ex});
+    bars.push({a,v:have?s:null,oos:ex>=3||r.oosWk.includes(k),ex});
   }
   for(let w=0;w<13;w++){
     const f=r.seasonal?ctx.season(r.it.category,Math.max(0,w*7-3),14):1;
@@ -2299,12 +2355,14 @@ function openSettings(){
       <div class="field"><label for="sDead">Dead stock after (days without a sale)</label><input id="sDead" data-s="deadDays" type="number" min="14" step="1" value="${settings.deadDays}"></div>
       <div class="field"><label for="sHold">Cost of holding stock (% per year)</label><input id="sHold" data-s="holdRate" type="number" min="0" max="100" step="1" value="${settings.holdRate}"></div>
     </div>
+    <div class="field" style="margin-top:10px"><label for="sSpeed">How fast the selling rate follows recent weeks</label><select id="sSpeed"><option value="fast"${settings.rateSpeed==='fast'?' selected':''}>Fast: a week from 2 weeks ago counts half</option><option value="normal"${settings.rateSpeed!=='fast'&&settings.rateSpeed!=='steady'?' selected':''}>Normal: a week from 3 weeks ago counts half (recommended)</option><option value="steady"${settings.rateSpeed==='steady'?' selected':''}>Steady: a week from 6 weeks ago counts half</option></select></div>
     <label class="check" style="margin-top:10px"><input id="sSeason" type="checkbox"${settings.useSeason?' checked':''}> Adjust for seasons using last year’s sales (needs about 15 months of history)</label>
     <label class="check" style="margin-top:6px"><input id="sEst" type="checkbox"${settings.estPack?' checked':''}> Estimate case size from bottle size and pack when the file has none (750ml = 12, 1.75L = 6, beer 6pk = 4, 12pk = 2…)</label></div>
     <div class="row"><button class="btn" id="sReset" type="button">Reset all settings and item adjustments</button><span class="hint" id="sResetMsg"></span></div>
   `);
   let tm;const later=()=>{clearTimeout(tm);tm=setTimeout(()=>{recompute()},250)};
   $$('input[data-s]',d).forEach(i=>i.oninput=()=>{const v=+i.value;if(i.value!==''&&isFinite(v)){settings[i.dataset.s]=v;store.set('settings',settings);later()}});
+  $('#sSpeed').onchange=e=>{settings.rateSpeed=e.target.value;store.set('settings',settings);later()};
   $('#sSeason').onchange=e=>{settings.useSeason=e.target.checked;store.set('settings',settings);later()};
   $('#sEst').onchange=e=>{settings.estPack=e.target.checked;store.set('settings',settings);later()};
   const renderVend=()=>{
@@ -2336,8 +2394,9 @@ function howHtml(){
     <p>Don’t also load the <i>Hourly Item Sales</i> report for the same week. It holds the same sales and would count them twice.</p>
     <p>Loaded files stay in this browser, so after the first big load you only add the newest week plus a fresh Item List.</p></section>
   <section><h3>Selling rate</h3>
-    <p>Each item’s rate blends its last 28 days, last 91 days and (without seasonal data) last 365 days, with recent weeks counting most.</p>
-    <p>Days when an item was out of stock are left out. Otherwise the planner would learn that an empty shelf means nobody wants it. A run of zero-sale days counts as a stockout when it’s too long to be bad luck for that item, or when the item is at zero right now.</p></section>
+    <p>Each item’s rate is a weighted average of its weekly sales over the last year, with recent weeks counting most: a week from 3 weeks ago counts half as much as this week, and one from 6 weeks ago a quarter. You can make it follow recent weeks faster or more steadily in Settings.</p>
+    <p>Weeks when an item was out of stock are left out. Otherwise the planner would learn that an empty shelf means nobody wants it, and the more history you load the lower the rate would drift. A week with no sales counts as a stockout when the item usually sells at least 2½ a week. The latest weeks only count as a stockout if the item is at zero right now; otherwise they’re treated as a real slowdown. With daily sales data, a run of zero-sale days counts as a stockout when it’s too long to be bad luck for that item.</p>
+    <p>One unusually big week (a party or bar order) counts as at most 2½ typical weeks, so it doesn’t inflate the next order.</p></section>
   <section><h3>Seasons</h3>
     <p>With about 15 months of history, the planner compares each department’s sales in the coming weeks last year with the weeks just before. That ratio scales the forecast, so Thanksgiving, December and summer beer are planned for before they arrive.</p></section>
   <section><h3>Building your order</h3>
