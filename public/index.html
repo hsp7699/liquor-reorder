@@ -62,6 +62,17 @@ button,input,select{font:inherit;color:inherit}
 .banner b{font-weight:600}
 
 /* data sources */
+.files-panel{display:flex;flex-direction:column;gap:10px}
+.files-head{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px;cursor:pointer;color:inherit}
+.files-head:hover{border-color:var(--muted)}
+.files-head:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.files-sum{flex:1;min-width:0;color:var(--ink-2);font-size:13px}
+.files-sum .chip{margin-left:6px}
+.files-act{font-size:13px;color:var(--accent);white-space:nowrap}
+.files-act::after{content:' ▴'}
+.files-panel.closed .files-act::after{content:' ▾'}
+.files-body{display:flex;flex-direction:column;gap:12px}
+.files-panel.closed .files-body{display:none}
 .sources{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
 .src{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
 .src.drag{border-color:var(--accent);background:var(--accent-soft)}
@@ -125,6 +136,8 @@ details.unmatched ul{margin:6px 0 0;padding-left:18px;font-size:12.5px;color:var
 .msel-btn.on{border-color:var(--accent);color:var(--accent)}
 .msel-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .msel-pop{min-width:280px}
+.msel-pop .mixpop-head{flex-wrap:wrap}
+.msel-pop .mixpop-head>span{display:flex;gap:2px;margin-left:auto}
 table.items.buys{min-width:0}
 .msel-pop input[type=search]{padding:6px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);width:100%}
 .msel-pop .check{display:flex;gap:8px;align-items:flex-start;cursor:pointer}
@@ -162,6 +175,14 @@ td.order b{font-family:var(--f-mono);font-weight:500;font-size:14px}
 .chip.acc{background:var(--accent-soft);color:var(--accent)}
 .chip.ok{background:var(--ok-soft);color:var(--ok)}
 .more{display:flex;justify-content:center;padding:12px}
+/* list views scroll inside their own box: headings stay put, the item column stays put sideways */
+.tablewrap.grid{max-height:calc(100vh - 150px);max-height:max(380px,calc(100dvh - 150px));overflow:auto}
+.tablewrap.grid thead th{position:sticky;top:0;z-index:2;border-bottom:0;box-shadow:inset 0 -1px 0 var(--line)}
+.tablewrap.grid thead th:first-child{left:0;z-index:3}
+.tablewrap.grid tbody tr:not(.qd-head) td:first-child{position:sticky;left:0;z-index:1;background:var(--surface)}
+.tablewrap.grid tbody tr:not(.qd-head):hover td:first-child{background:var(--sunk)}
+.tablewrap.grid.scrolled-x thead th:first-child,.tablewrap.grid.scrolled-x tbody tr:not(.qd-head) td:first-child{box-shadow:inset -1px 0 0 var(--line)}
+.tablewrap.grid.scrolled-x thead th:first-child{box-shadow:inset -1px -1px 0 var(--line)}
 .empty{padding:40px 16px;text-align:center;color:var(--muted)}
 
 /* order sheets */
@@ -309,6 +330,9 @@ textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12
     <div><b>This is sample data for a made-up store.</b> Load your Advent inventory and sales exports below to replace it. Files are read in this browser only and are never uploaded.</div>
   </div>
 
+  <section class="files-panel" id="filesPanel">
+  <button class="files-head" id="filesToggle" type="button" aria-expanded="true" aria-controls="filesBody"><span class="label">Your files</span><span class="files-sum" id="filesSum"></span><span class="files-act" id="filesAct">Hide</span></button>
+  <div class="files-body" id="filesBody">
   <div class="sources">
     <div class="src" id="srcInv">
       <div class="src-head"><span class="label">Inventory list</span><button class="btn small" id="btnInv" type="button">Choose file</button></div>
@@ -331,6 +355,8 @@ textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12
     </div>
   </div>
   <div class="row" style="justify-content:space-between"><div id="matchInfo"></div><button class="btn ghost small" id="btnClear" type="button" hidden>Clear loaded data</button></div>
+  </div>
+  </section>
   <div id="mapper"></div>
 
   <div class="kpis" id="kpis"></div>
@@ -1454,9 +1480,30 @@ function renderSources(){
     }
   }
   $('#matchInfo').innerHTML=h;$('#matchInfo').hidden=!h;
+  renderFilesPanel();
   $$('[data-flag]',$('#matchInfo')).forEach(b=>b.onclick=()=>{goTab('all');S.flag=[b.dataset.flag];renderFilters();renderView();$('#tabs').scrollIntoView({behavior:'smooth'})});
   $$('[data-vfilter]',$('#matchInfo')).forEach(b=>b.onclick=()=>{goTab('all');S.vendor=[b.dataset.vfilter];renderFilters();renderView();$('#tabs').scrollIntoView({behavior:'smooth'})});
   $$('[data-open]',$('#matchInfo')).forEach(b=>b.onclick=openSettings);
+}
+
+// the upload section folds down to one line once your files are in; your choice is remembered in this browser
+// (stays open while you're loading files this visit)
+function filesOpen(){const v=store.get('filesOpen',null);return v!=null?v:S.filesBusy||S.sample||!S.inv}
+function renderFilesPanel(){
+  const open=filesOpen(),r=S.res,ovl=r?r.overlaps.size:0;
+  $('#filesPanel').classList.toggle('closed',!open);
+  $('#filesToggle').setAttribute('aria-expanded',String(open));
+  $('#filesAct').textContent=open?'Hide':'Show files';
+  const parts=[];
+  if(S.sample)parts.push('Sample store');
+  else if(S.inv)parts.push(`${int(S.inv.items.length)} items`);
+  else parts.push('No item list');
+  if(!S.sample){
+    if(S.sales.length){const lo=Math.min(...S.sales.map(f=>f.from)),hi=Math.max(...S.sales.map(f=>f.to));parts.push(`${int(S.sales.length)} sales file${S.sales.length===1?'':'s'}, ${fmtDayShort(lo)} – ${fmtDay(hi)}`)}
+    else parts.push('no sales history');
+  }
+  if(S.purch)parts.push(`${int(S.purch.vendors)} distributors`);
+  $('#filesSum').innerHTML=esc(parts.join(' · '))+(ovl?'<span class="chip warn">Files overlap</span>':'');
 }
 
 function renderMapper(scroll=true){
@@ -1513,7 +1560,7 @@ function renderMapper(scroll=true){
   }
   $('#mSkip').onclick=()=>{S.pending=S.pending.filter(x=>!group.includes(x));renderMapper()};
   $('#mApply').onclick=()=>{
-    syncGroup();
+    syncGroup();S.filesBusy=true;
     const outs=[];
     for(const x of group){
       try{outs.push([x,applyPending(x)])}
@@ -1564,7 +1611,8 @@ function goTab(v,flag=''){
 }
 function renderTabs(){
   const r=S.res;
-  const c=r?{reorder:r.results.filter(x=>x.units>0||(x.flags.includes('oos')&&!x.held)).length,all:r.results.length,dead:r.results.filter(x=>x.flags.includes('dead')||x.flags.includes('over')).length,sheets:new Set(r.results.filter(x=>x.units>0).map(x=>x.it.vendor)).size}:{};
+  // each count is what that tab lists when you open it: Order sheets = one sheet per distributor on your order
+  const c=r?{reorder:r.results.filter(isSuggested).length,all:r.results.length,dead:r.results.filter(x=>x.flags.includes('dead')||x.flags.includes('over')).length,sheets:new Set(r.results.filter(x=>x.ord>0).map(x=>x.it.vendor)).size}:{};
   if(r)c.deals=dealsList().length;
   const T=[['reorder','Reorder'],['sheets','Order sheets'],['deals','Quantity deals'],['all','All items'],['dead','Dead & overstock'],['how','How it works']];
   $('#tabs').innerHTML=T.map(([k,l])=>`<button class="tab" role="tab" type="button" data-v="${k}" aria-selected="${S.view===k}">${l}${c[k]!=null?`<span class="c">${int(c[k])}</span>`:''}</button>`).join('');
@@ -1599,6 +1647,7 @@ function mselLabel(id){
   const f=FILTERS[id],sel=S[id];
   if(!sel.length)return f.all;
   if(sel.length===1){const o=f.opts.find(o=>o.k===sel[0]);return o?o.label:sel[0]}
+  if(f.opts.length&&f.opts.every(o=>sel.includes(o.k)))return `All ${f.many} ticked`;
   return `${sel.length} ${f.many}`;
 }
 function renderMsel(id){
@@ -1613,7 +1662,7 @@ function renderMselPop(id,q=''){
   const f=FILTERS[id],box=$('#'+f.el),pop=$('.msel-pop',box);
   const long=f.opts.length>8,ql=q.trim().toLowerCase();
   const list=f.opts.filter(o=>!ql||o.label.toLowerCase().includes(ql));
-  pop.innerHTML=`<div class="mixpop-head"><b>${esc(f.all.replace(/^(All|Any) /,'').replace(/^./,c=>c.toUpperCase()))}</b><span><button type="button" class="btn ghost small" data-mclear>Clear</button></span></div>`+
+  pop.innerHTML=`<div class="mixpop-head"><b>${esc(f.all.replace(/^(All|Any) /,'').replace(/^./,c=>c.toUpperCase()))}</b><span><button type="button" class="btn ghost small" data-mall>Select all</button><button type="button" class="btn ghost small" data-mclear>Deselect all</button></span></div>`+
     (long?`<input type="search" placeholder="Find a ${f.one}" aria-label="Find a ${f.one}" value="${esc(q)}">`:'')+
     `<div class="msel-list">${list.map(o=>`<label class="check"><input type="checkbox" value="${esc(o.k)}"${S[id].includes(o.k)?' checked':''}> <span>${esc(o.label)}</span> <span class="sub">${int(o.n)}</span></label>`).join('')||'<p class="hint">Nothing matches.</p>'}</div>`;
   pop.onclick=e=>e.stopPropagation();
@@ -1625,7 +1674,9 @@ function renderMselPop(id,q=''){
     $('#fReset').hidden=!Object.keys(FILTERS).some(k=>S[k].length);
     renderView();
   });
-  $('[data-mclear]',pop).onclick=()=>{S[id]=[];S.limit=200;renderMsel(id);renderView()};
+  $('[data-mclear]',pop).onclick=()=>{S[id]=ql?S[id].filter(k=>!list.some(o=>o.k===k)):[];S.limit=200;renderMsel(id);renderMselPop(id,q);renderView()};
+  // with a search typed, these tick or untick just the matching choices
+  $('[data-mall]',pop).onclick=()=>{S[id]=[...new Set([...S[id],...list.map(o=>o.k)])];S.limit=200;renderMsel(id);renderMselPop(id,q);renderView()};
 }
 function closeMsel(focus){
   const id=openMsel;openMsel='';
@@ -1723,14 +1774,27 @@ function renderView(){
   const groupHtml=qdGroups.map(g=>qdHeadRow(g,cols)+g.rs.map(row).join('')).join('');
   const restHead=qdGroups.length&&shown.length?`<tr class="qd-head rest"><td colspan="${cols}"><b>Everything else</b></td></tr>`:'';
   const nSup=view==='reorder'?r.results.filter(x=>x.held).length:0;
-  el.innerHTML=`<div class="tablewrap"><table class="items"><thead>${head}</thead><tbody>${groupHtml}${restHead}${shown.map(row).join('')}</tbody></table>${list.length||qdGroups.length?'':`<div class="empty">${emptyMsg}</div>`}${list.length>S.limit?`<div class="more"><button class="btn" id="btnMore" type="button">Show ${int(Math.min(200,list.length-S.limit))} more of ${int(list.length-S.limit)}</button></div>`:''}</div>${nSup?`<div class="supp-note">${int(nSup)} item${nSup===1?' is':'s are'} suppressed and won’t be suggested. <button class="btn ghost small" id="btnViewSup" type="button">View suppressed</button></div>`:''}`;
+  // keep the box where it was when only the numbers changed (an item added, a sync); start at the top for a new list
+  const gridKey=JSON.stringify([view,S.q,S.vendor,S.cat,S.flag,S.sort[view]]),oldBox=$('.tablewrap.grid',el);
+  const keep=oldBox&&gridKey===lastGridKey?[oldBox.scrollTop,oldBox.scrollLeft]:null;lastGridKey=gridKey;
+  if(oldBox)oldBox.onscroll=null;   // a box being replaced reports a last scroll at height 0
+  el.innerHTML=`<div class="tablewrap grid"><table class="items"><thead>${head}</thead><tbody>${groupHtml}${restHead}${shown.map(row).join('')}</tbody></table>${list.length||qdGroups.length?'':`<div class="empty">${emptyMsg}</div>`}${list.length>S.limit?`<div class="more"><button class="btn" id="btnMore" type="button">Show ${int(Math.min(200,list.length-S.limit))} more of ${int(list.length-S.limit)}</button></div>`:''}</div>${nSup?`<div class="supp-note">${int(nSup)} item${nSup===1?' is':'s are'} suppressed and won’t be suggested. <button class="btn ghost small" id="btnViewSup" type="button">View suppressed</button></div>`:''}`;
   const vs=$('#btnViewSup');if(vs)vs.onclick=()=>goTab('all','hold');
   bindOrderButtons(el);
   $$('th[data-sort]',el).forEach(h=>h.onclick=()=>{const k=h.dataset.sort;const cur=S.sort[view];S.sort[view]=[k,cur[0]===k?-cur[1]:(['name','vendor','cls','dos','urg','last'].includes(k)?1:-1)];renderView()});
   $$('tbody tr[data-key]',el).forEach(tr=>tr.onclick=()=>openDetail(tr.dataset.key));
   bindQdButtons(el);
   const m=$('#btnMore');if(m)m.onclick=()=>{S.limit+=200;renderView()};
+  const box=$('.tablewrap.grid',el);
+  if(keep){box.scrollTop=keep[0];box.scrollLeft=keep[1]}
+  box.classList.toggle('scrolled-x',box.scrollLeft>0);
+  // the next 200 load as you near the bottom of the box
+  box.onscroll=()=>{
+    box.classList.toggle('scrolled-x',box.scrollLeft>0);
+    if(box.isConnected&&box.clientHeight>0&&list.length>S.limit&&box.scrollTop+box.clientHeight>box.scrollHeight-400){S.limit+=200;renderView()}
+  };
 }
+let lastGridKey='';
 
 // the rows a list view shows, after search and filters, in the order on screen
 function viewRows(view){
@@ -2625,6 +2689,7 @@ $('#btnClearPurch').onclick=()=>{
 };
 $('#salesFiles').addEventListener('click',e=>{const b=e.target.closest('[data-rm]');if(!b)return;const [f]=S.sales.splice(+b.dataset.rm,1);persist();recompute();if(f&&f.id)manifestOp({removeSales:[f.id]})});
 $('#btnSettings').onclick=openSettings;
+$('#filesToggle').onclick=()=>{store.set('filesOpen',!filesOpen());renderFilesPanel()};
 $('#q').oninput=e=>{S.q=e.target.value;S.limit=200;renderView()};
 $('#btnExport').onclick=e=>{e.stopPropagation();const p=$('#exportPop'),open=p.hidden;closeMsel();if(open){renderExportPop();p.hidden=false;$('#btnExport').setAttribute('aria-expanded','true');$('[data-exp]',p).focus()}};
 $('#fReset').onclick=()=>{S.vendor=[];S.cat=[];S.flag=[];S.limit=200;closeMsel();renderFilters();renderView()};
