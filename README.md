@@ -34,8 +34,9 @@ After changing `app.html`, run `node scripts/build.mjs` and commit both files.
    **Secret**, name it `APP_PASSWORD` and enter a password of at least 8 characters (longer is better).
    Click **Deploy**. Use the Secret type: a plain Text variable would be wiped by the next deploy.
 
-Until a password is set, the storage API refuses every request and the planner keeps data in each
-browser, so nothing is ever exposed by a half-finished setup.
+Until a password is set, the storage API refuses every request and the site shows only a setup
+screen, so nothing is ever exposed by a half-finished setup. The Cloudflare site never keeps data in
+the browser: it works only from shared storage, and shows only the password screen until you sign in.
 
 Cloudflare Access still works instead of (or as well as) the password: fill in `ACCESS_TEAM_DOMAIN` and
 `ACCESS_AUD` in `wrangler.toml`.

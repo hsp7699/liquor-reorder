@@ -58,11 +58,17 @@ button,input,select{font:inherit;color:inherit}
 .btn.small{padding:4px 9px;font-size:12px}
 
 /* sample banner */
-.banner.login{flex-wrap:wrap;align-items:center}
-.banner.login>div:first-child{flex:1 1 320px}
-.banner.login input{padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);min-width:0;width:200px}
-.banner.login .err{flex-basis:100%}
-.banner.login .err:empty{display:none}
+body.gated .wrap>:not(header):not(#gate){display:none!important}
+body.gated #btnSettings,body.gated #syncStatus{display:none}
+.gate{display:flex;justify-content:center;padding:8vh 0}
+.gate-card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:22px 24px;max-width:440px;width:100%;display:flex;flex-direction:column;gap:12px}
+.gate-card h2{margin:0;font-family:var(--f-display);font-size:24px;letter-spacing:.02em}
+.gate-card p{margin:0;color:var(--ink-2);font-size:14px}
+.gate-card p:empty{display:none}
+.gate-card form{display:flex;flex-direction:column;gap:6px}
+.gate-card input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font-size:15px}
+.gate-card .err:empty{display:none}
+#gateRetry{align-self:flex-start}
 .banner{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-radius:8px;background:var(--accent-soft);color:var(--ink);font-size:13px}
 .banner b{font-weight:600}
 
@@ -96,7 +102,6 @@ button,input,select{font:inherit;color:inherit}
 .sync{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);padding:6px 10px;border-radius:999px;background:var(--sunk);align-self:center;white-space:nowrap}
 .sync::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--idle)}
 .sync.ok::before{background:var(--ok)}.sync.busy::before{background:var(--warn)}.sync.err{color:var(--crit)}.sync.err::before{background:var(--crit)}
-.banner.migrate{flex-direction:column;align-items:flex-start;gap:8px;background:var(--warn-soft)}
 .matchline{font-size:12.5px;color:var(--ink-2);display:flex;flex-wrap:wrap;gap:4px 14px}
 details.unmatched summary{cursor:pointer;color:var(--warn);font-size:12.5px}
 details.unmatched ul{margin:6px 0 0;padding-left:18px;font-size:12.5px;color:var(--ink-2);max-height:160px;overflow:auto}
@@ -330,12 +335,19 @@ textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12
     </div>
   </header>
 
-  <form class="banner login" id="loginBox" hidden>
-    <div><b>Your shared files are locked.</b> Enter the store password to open them on this computer. It stays signed in for 90 days.</div>
-    <div class="row"><input type="password" id="loginPw" autocomplete="current-password" aria-label="Store password" placeholder="Store password" required><button class="btn small primary" id="loginGo" type="submit">Open</button></div>
-    <div class="err" id="loginErr" role="alert"></div>
-  </form>
-  <div class="banner migrate" id="migrate" hidden></div>
+  <!-- the Cloudflare site works only from shared storage: until it opens, this is all that shows -->
+  <section class="gate" id="gate" hidden>
+    <div class="gate-card" role="status" aria-live="polite">
+      <h2 id="gateTitle">Opening your shared files…</h2>
+      <p id="gateMsg"></p>
+      <form id="loginBox" hidden>
+        <label class="label" for="loginPw">Store password</label>
+        <div class="row"><input type="password" id="loginPw" autocomplete="current-password" required><button class="btn primary" id="loginGo" type="submit">Open</button></div>
+        <div class="err" id="loginErr" role="alert"></div>
+      </form>
+      <button class="btn" id="gateRetry" type="button" hidden>Try again</button>
+    </div>
+  </section>
   <div class="banner" id="sampleBanner" hidden>
     <div><b>This is sample data for a made-up store.</b> Load your Advent inventory and sales exports below to replace it. Files are read in this browser only and are never uploaded.</div>
   </div>
@@ -446,7 +458,10 @@ const idb={
   async get(k){try{const db=await this.open();return await new Promise((res,rej)=>{const t=db.transaction('kv').objectStore('kv').get(k);t.onsuccess=()=>res(t.result);t.onerror=()=>rej(t.error)})}catch(e){return null}},
   async set(k,v){try{const db=await this.open();await new Promise((res,rej)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)});return true}catch(e){return false}}
 };
-function persist(){if(!cloud.on&&(!S.sample||S.purch))idb.set('data',{inv:S.sample?null:S.inv,sales:S.sample?[]:S.sales,purch:S.purch})}
+// the Cloudflare build (scripts/build.mjs) works only from shared storage; anywhere else, this browser's storage
+const CLOUD_SITE=!!document.querySelector('meta[name="lrp-storage"]');
+if(CLOUD_SITE)document.body.classList.add('gated');
+function persist(){if(!CLOUD_SITE&&!cloud.on&&(!S.sample||S.purch))idb.set('data',{inv:S.sample?null:S.inv,sales:S.sample?[]:S.sales,purch:S.purch})}
 
 /* ---------- shared storage (the Cloudflare site) ---------- */
 // On the Cloudflare site, uploaded files, the order, QDs, saved deals and settings live in your R2 bucket,
@@ -576,7 +591,7 @@ async function cloudPull(){
     if(JSON.stringify(j.manifest)!==JSON.stringify(cloud.manifest)){useMaps(changed);await loadManifest(j.manifest);recompute();if(S.sample)seedSampleCart()}
     else if(changed.length){useMaps(changed);afterRemote(changed)}
     cloud.last=Date.now();
-  }catch(e){cloud.error=e.message;if(e.code==='login_required'){cloud.off=e.message;showLogin()}else if(e.status===401)cloud.off='Your sign-in expired. Reload the page to sign in again.'}
+  }catch(e){cloud.error=e.message;if(e.code==='login_required')showGate('login');else if(e.status===401)cloud.off='Your sign-in expired. Reload the page to sign in again.'}
   syncStatus();
 }
 function syncStatus(){
@@ -588,61 +603,49 @@ function syncStatus(){
   el.textContent=cloud.error?'Not saved yet, retrying':pending?'Saving…':'Shared storage';
   el.title=cloud.error?cloud.error:`Files, your order, QDs and settings are saved to your Cloudflare storage${cloud.user==='store'?' · signed in with the store password':cloud.user?' · signed in as '+cloud.user:''}.`;
 }
-// first visit after switching on shared storage: offer to copy what this browser already has
-async function offerMigration(){
-  const saved=await idb.get('data');
-  const local={};for(const k of SYNCED){const v=store.get(k,null);if(v&&(Array.isArray(v)?v.length:Object.keys(v).length))local[k]=v}
-  const hasFiles=saved&&(saved.inv||saved.purch||(saved.sales||[]).length);
-  const cloudEmpty=!cloud.manifest.inventory&&!cloud.manifest.purchases&&!(cloud.manifest.sales||[]).length&&SYNCED.every(k=>!Object.keys(cloud.maps[k]||{}).length);
-  if(!cloudEmpty||(!hasFiles&&!Object.keys(local).length)||store.get('migrated',false))return;
-  const el=$('#migrate');el.hidden=false;
-  el.innerHTML=`<div><b>This browser has data saved from before shared storage was on.</b> ${hasFiles?`${saved.inv?'An item list':''}${saved.inv&&(saved.sales||[]).length?' and ':''}${(saved.sales||[]).length?`${saved.sales.length} sales file${saved.sales.length===1?'':'s'}`:''}`:'Settings and your order'}. Copy it to shared storage so your other computers see it too?</div><div class="row"><button class="btn small primary" id="migYes" type="button">Copy to shared storage</button><button class="btn small ghost" id="migNo" type="button">Not now</button></div>`;
-  $('#migNo').onclick=()=>{el.hidden=true;store.set('migrated',true)};
-  $('#migYes').onclick=async()=>{
-    el.innerHTML='<div>Copying to shared storage…</div>';
-    for(const [k,v] of Object.entries(local)){cloud.want[k]=v;await cloudPush(k)}
-    const items=[];
-    if(saved&&saved.inv){saved.inv.id=saved.inv.id||newId();items.push({x:{kind:'inv',fileName:saved.inv.fileName},out:saved.inv,named:{}})}
-    if(saved&&saved.purch){saved.purch.id=saved.purch.id||newId();items.push({x:{kind:'purch',fileName:saved.purch.fileName},out:saved.purch,named:{}})}
-    for(const f of (saved&&saved.sales)||[]){f.id=f.id||newId();items.push({x:{kind:'sales',fileName:f.fileName,from:f.from,to:f.to},out:f,named:{}})}
-    await cloudUpload(items);
-    store.set('migrated',true);el.hidden=true;
-    const j=await (await api('state')).json();cloud.maps=j.maps;useMaps(SYNCED);await loadManifest(j.manifest);resetQuick();recompute();
-    toast('Copied to shared storage');
-  };
+// the store password: asked once per browser, then a 90-day session cookie does the rest.
+// Until shared storage opens, the Cloudflare site shows only this screen.
+function showGate(kind,msg){
+  document.body.classList.add('gated');$('#gate').hidden=false;
+  const T={loading:'Opening your shared files…',login:'Enter the store password',setup:'Shared storage isn’t set up yet',error:'Can’t reach your shared files'};
+  $('#gateTitle').textContent=T[kind];
+  $('#gateMsg').textContent=kind==='login'?'This computer stays signed in for 90 days.':kind==='setup'?`${msg} In Cloudflare, open Workers & Pages → liquor-reorder → Settings → Variables and Secrets, add a Secret named APP_PASSWORD of at least 8 characters, then Deploy and reload this page.`:msg||'';
+  $('#loginBox').hidden=kind!=='login';$('#gateRetry').hidden=kind==='login'||kind==='loading';
+  $('#subline').textContent=kind==='login'?'Signed out':'';
+  if(kind==='login'){
+    $('#loginErr').textContent='';setTimeout(()=>$('#loginPw').focus(),0);
+    $('#loginBox').onsubmit=async e=>{
+      e.preventDefault();const b=$('#loginGo');b.disabled=true;$('#loginErr').textContent='';
+      try{await api('login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:$('#loginPw').value})});location.reload()}
+      catch(err){$('#loginErr').textContent=err.message;$('#loginPw').select();b.disabled=false}
+    };
+  }
+  $('#gateRetry').onclick=()=>location.reload();
 }
-// the store password: asked once per browser, then a 90-day session cookie does the rest
-function showLogin(){
-  const f=$('#loginBox');if(!f.hidden)return;
-  f.hidden=false;$('#loginErr').textContent='';
-  f.onsubmit=async e=>{
-    e.preventDefault();const b=$('#loginGo');b.disabled=true;$('#loginErr').textContent='';
-    try{await api('login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:$('#loginPw').value})});location.reload()}
-    catch(err){$('#loginErr').textContent=err.message;$('#loginPw').select();b.disabled=false}
-  };
-}
+function hideGate(){document.body.classList.remove('gated');$('#gate').hidden=true}
 async function signOut(){try{await api('logout',{method:'POST'})}catch(e){}location.reload()}
 async function cloudInit(){
   // only the Cloudflare build (scripts/build.mjs) has a storage API to look for
-  if(!document.querySelector('meta[name="lrp-storage"]'))return false;
+  if(!CLOUD_SITE)return false;
+  showGate('loading');
   let j;
   try{
     const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),8000);
     j=await (await api('state',{signal:ctl.signal})).json();clearTimeout(t);
   }catch(e){
-    // 503 = Cloudflare site without a password/Access or R2 set up yet; anything else = not the Cloudflare site
-    if(e.status===503||e.status===401)cloud.off=e.message;
-    if(e.code==='login_required')showLogin();
-    syncStatus();return false;
+    if(e.code==='login_required')showGate('login');
+    else if(e.status===503)showGate('setup',e.message);
+    else showGate('error',e.status===401?e.message:`The planner couldn’t load your shared files (${e.message}). Check your internet connection and try again.`);
+    return false;
   }
-  cloud.on=true;cloud.user=j.user||'';cloud.maps=j.maps||{};cloud.last=Date.now();
+  cloud.on=true;cloud.user=j.user||'';cloud.maps=j.maps||{};cloud.last=Date.now();hideGate();
   useMaps(SYNCED.filter(k=>Object.keys(cloud.maps[k]||{}).length));
   await loadManifest(j.manifest||{inventory:null,purchases:null,sales:[]});
   $('#sampleBanner').innerHTML='<div><b>This is sample data for a made-up store.</b> Load your Advent inventory and sales exports below to replace it. They’re saved to your shared storage, so every computer you sign in on sees them.</div>';
   setInterval(cloudPull,30000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)cloudPull()});
   window.addEventListener('focus',cloudPull);
-  syncStatus();offerMigration();
+  syncStatus();
   return true;
 }
 const SAMPLE_V={'Valley Beer Distributors':{lead:2,cycle:7,min:300},'Coastal Wine Imports':{lead:5,cycle:14,min:500},'Crown Beverage Co.':{lead:3,cycle:7,min:250}};
@@ -2750,6 +2753,7 @@ recompute();
 seedSampleCart();
 (async()=>{
   if(await cloudInit()){resetQuick();recompute();if(S.sample)seedSampleCart();return}
+  if(CLOUD_SITE)return;   // signed out or not set up: the gate is showing, nothing loads from this browser
   const saved=await idb.get('data');
   if(!saved||!S.sample||S.pending.length)return;
   if(saved.purch)S.purch=saved.purch;
