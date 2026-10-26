@@ -58,6 +58,11 @@ button,input,select{font:inherit;color:inherit}
 .btn.small{padding:4px 9px;font-size:12px}
 
 /* sample banner */
+.banner.login{flex-wrap:wrap;align-items:center}
+.banner.login>div:first-child{flex:1 1 320px}
+.banner.login input{padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:var(--surface);min-width:0;width:200px}
+.banner.login .err{flex-basis:100%}
+.banner.login .err:empty{display:none}
 .banner{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-radius:8px;background:var(--accent-soft);color:var(--ink);font-size:13px}
 .banner b{font-weight:600}
 
@@ -325,6 +330,11 @@ textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12
     </div>
   </header>
 
+  <form class="banner login" id="loginBox" hidden>
+    <div><b>Your shared files are locked.</b> Enter the store password to open them on this computer. It stays signed in for 90 days.</div>
+    <div class="row"><input type="password" id="loginPw" autocomplete="current-password" aria-label="Store password" placeholder="Store password" required><button class="btn small primary" id="loginGo" type="submit">Open</button></div>
+    <div class="err" id="loginErr" role="alert"></div>
+  </form>
   <div class="banner migrate" id="migrate" hidden></div>
   <div class="banner" id="sampleBanner" hidden>
     <div><b>This is sample data for a made-up store.</b> Load your Advent inventory and sales exports below to replace it. Files are read in this browser only and are never uploaded.</div>
@@ -566,7 +576,7 @@ async function cloudPull(){
     if(JSON.stringify(j.manifest)!==JSON.stringify(cloud.manifest)){useMaps(changed);await loadManifest(j.manifest);recompute();if(S.sample)seedSampleCart()}
     else if(changed.length){useMaps(changed);afterRemote(changed)}
     cloud.last=Date.now();
-  }catch(e){cloud.error=e.message;if(e.status===401)cloud.off='Your sign-in expired. Reload the page to sign in again.'}
+  }catch(e){cloud.error=e.message;if(e.code==='login_required'){cloud.off=e.message;showLogin()}else if(e.status===401)cloud.off='Your sign-in expired. Reload the page to sign in again.'}
   syncStatus();
 }
 function syncStatus(){
@@ -576,7 +586,7 @@ function syncStatus(){
   const pending=cloud.saving||Object.keys(cloud.want).length;
   el.className='sync '+(cloud.error?'err':pending?'busy':'ok');
   el.textContent=cloud.error?'Not saved yet, retrying':pending?'Saving…':'Shared storage';
-  el.title=cloud.error?cloud.error:`Files, your order, QDs and settings are saved to your Cloudflare storage${cloud.user?' · signed in as '+cloud.user:''}.`;
+  el.title=cloud.error?cloud.error:`Files, your order, QDs and settings are saved to your Cloudflare storage${cloud.user==='store'?' · signed in with the store password':cloud.user?' · signed in as '+cloud.user:''}.`;
 }
 // first visit after switching on shared storage: offer to copy what this browser already has
 async function offerMigration(){
@@ -601,6 +611,17 @@ async function offerMigration(){
     toast('Copied to shared storage');
   };
 }
+// the store password: asked once per browser, then a 90-day session cookie does the rest
+function showLogin(){
+  const f=$('#loginBox');if(!f.hidden)return;
+  f.hidden=false;$('#loginErr').textContent='';
+  f.onsubmit=async e=>{
+    e.preventDefault();const b=$('#loginGo');b.disabled=true;$('#loginErr').textContent='';
+    try{await api('login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:$('#loginPw').value})});location.reload()}
+    catch(err){$('#loginErr').textContent=err.message;$('#loginPw').select();b.disabled=false}
+  };
+}
+async function signOut(){try{await api('logout',{method:'POST'})}catch(e){}location.reload()}
 async function cloudInit(){
   // only the Cloudflare build (scripts/build.mjs) has a storage API to look for
   if(!document.querySelector('meta[name="lrp-storage"]'))return false;
@@ -609,8 +630,9 @@ async function cloudInit(){
     const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),8000);
     j=await (await api('state',{signal:ctl.signal})).json();clearTimeout(t);
   }catch(e){
-    // 503 = Cloudflare site without Access/R2 set up yet; anything else = not the Cloudflare site
+    // 503 = Cloudflare site without a password/Access or R2 set up yet; anything else = not the Cloudflare site
     if(e.status===503||e.status===401)cloud.off=e.message;
+    if(e.code==='login_required')showLogin();
     syncStatus();return false;
   }
   cloud.on=true;cloud.user=j.user||'';cloud.maps=j.maps||{};cloud.last=Date.now();
@@ -2596,6 +2618,7 @@ function openSettings(){
     <label class="check" style="margin-top:10px"><input id="sSeason" type="checkbox"${settings.useSeason?' checked':''}> Adjust for seasons using last year’s sales (needs about 15 months of history)</label>
     <label class="check" style="margin-top:6px"><input id="sEst" type="checkbox"${settings.estPack?' checked':''}> Estimate case size from bottle size and pack when the file has none (750ml = 12, 1.75L = 6, beer 6pk = 4, 12pk = 2…)</label></div>
     <div class="row"><button class="btn" id="sReset" type="button">Reset all settings and item adjustments</button><span class="hint" id="sResetMsg"></span></div>
+    ${cloud.on&&cloud.user==='store'?'<div class="row"><button class="btn ghost" id="sSignOut" type="button">Sign out of shared storage on this computer</button><span class="hint">You’ll need the store password to open it again.</span></div>':''}
   `);
   let tm;const later=()=>{clearTimeout(tm);tm=setTimeout(()=>{recompute()},250)};
   $$('input[data-s]',d).forEach(i=>i.oninput=()=>{const v=+i.value;if(i.value!==''&&isFinite(v)){settings[i.dataset.s]=v;store.set('settings',settings);later()}});
@@ -2615,6 +2638,7 @@ function openSettings(){
   $$('[data-d]',d).forEach(i=>i.onchange=()=>setDept(+i.dataset.d,{vendor:i.value.trim()}));
   $$('[data-dk]',d).forEach(i=>i.onchange=()=>setDept(+i.dataset.dk,{skip:!i.checked}));
   let armed=false;
+  if($('#sSignOut'))$('#sSignOut').onclick=signOut;
   $('#sReset').onclick=()=>{
     if(!armed){armed=true;$('#sReset').textContent='Click again to reset';$('#sResetMsg').textContent='This clears distributor settings and every item adjustment.';return}
     settings=Object.assign({},DEFAULTS);vendorCfg={};overrides={};deptCfg={};

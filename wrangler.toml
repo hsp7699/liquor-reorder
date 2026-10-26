@@ -13,11 +13,17 @@ binding = "ASSETS"
 binding = "DATA"
 bucket_name = "liquor-reorder-data"
 
-# Cloudflare Access settings. Until both are filled in, the storage API stays closed and the
-# planner keeps everything in each browser, like before.
+# Who can use the shared storage. The storage API stays closed until one of these is set up.
+#
+# Store password (what this store uses): set a secret named APP_PASSWORD in the Cloudflare dashboard,
+# Worker -> Settings -> Variables and Secrets -> Add -> type "Secret". At least 8 characters. It is never
+# kept in this file. Each browser asks for it once and stays signed in for 90 days; changing it signs
+# every browser out.
+#
+# Cloudflare Access (optional, instead of or as well as the password):
 #   ACCESS_TEAM_DOMAIN: your team domain ("yourteam.cloudflareaccess.com") or the key address
 #                       Cloudflare shows ("https://yourteam.cloudflareaccess.com/cdn-cgi/access/certs")
 #   ACCESS_AUD: the audience (AUD) tag Cloudflare shows for the Access application
 [vars]
-ACCESS_TEAM_DOMAIN = "https://curly-brook-2a76.cloudflareaccess.com/cdn-cgi/access/certs"
-ACCESS_AUD = "003c450f4e3e23edf0388068207244809561890da03c629050d3b994955398aa"
+ACCESS_TEAM_DOMAIN = ""
+ACCESS_AUD = ""

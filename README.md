@@ -5,7 +5,7 @@ A reorder planner for a liquor store running Advent POS. Load the **Item List Re
 suggests order quantities per distributor, and helps work out quantity deals (QDs).
 
 On the Cloudflare site (a Cloudflare Worker), uploaded files, the order, QDs, saved deals and settings are kept in your own
-Cloudflare R2 storage behind Cloudflare Access, so every computer you sign in on sees the same data.
+Cloudflare R2 storage behind a store password, so every computer you sign in on sees the same data.
 
 ## What's in here
 
@@ -15,8 +15,8 @@ Cloudflare R2 storage behind Cloudflare Access, so every computer you sign in on
 | `public/index.html` | The page the Cloudflare Worker serves, built from `app.html` (don't edit by hand) |
 | `src/worker.js` | The Cloudflare Worker: serves the page and routes `/api` to the storage API |
 | `src/api.js`, `src/store.js` | The storage API (R2 reads and writes) |
-| `src/auth.js` | Checks the Cloudflare Access sign-in on every `/api` request |
-| `wrangler.toml` | Cloudflare settings: the Worker, the R2 bucket and the Access settings |
+| `src/auth.js` | Checks the sign-in (store password session, or Cloudflare Access) on every `/api` request |
+| `wrangler.toml` | Cloudflare settings: the Worker and the R2 bucket |
 | `scripts/build.mjs` | Builds `public/index.html` from `app.html` |
 
 After changing `app.html`, run `node scripts/build.mjs` and commit both files.
@@ -30,21 +30,23 @@ After changing `app.html`, run `node scripts/build.mjs` and commit both files.
 2. **Worker.** **Workers & Pages → Create → Import a repository**, pick this repository and deploy with
    the default deploy command (`npx wrangler deploy`). The Worker's name must be `liquor-reorder`, the
    `name` in `wrangler.toml`. You get an address like `liquor-reorder.<your-account>.workers.dev`.
-3. **Cloudflare Access.** Open the Worker → **Settings → Domains & Routes**, and next to **workers.dev**
-   click **Enable Cloudflare Access**. Then click **Manage Cloudflare Access** and set the email addresses
-   allowed in. Cloudflare shows the application's **audience (AUD) tag** and **JWKS URL**.
-4. **Tell the API about Access.** Put the JWKS URL (or just the team domain,
-   `yourteam.cloudflareaccess.com`) into `ACCESS_TEAM_DOMAIN` and the AUD tag into `ACCESS_AUD` in
-   `wrangler.toml`, commit and push. Neither is a secret.
+3. **Store password.** Open the Worker → **Settings → Variables and Secrets → Add**, choose type
+   **Secret**, name it `APP_PASSWORD` and enter a password of at least 8 characters (longer is better).
+   Click **Deploy**. Use the Secret type: a plain Text variable would be wiped by the next deploy.
 
-Until step 4 is done, the storage API refuses every request and the planner keeps data in each
+Until a password is set, the storage API refuses every request and the planner keeps data in each
 browser, so nothing is ever exposed by a half-finished setup.
+
+Cloudflare Access still works instead of (or as well as) the password: fill in `ACCESS_TEAM_DOMAIN` and
+`ACCESS_AUD` in `wrangler.toml`.
 
 ## How the shared storage works
 
-- Every `/api` request must carry a valid Cloudflare Access sign-in. The API checks the token's
-  signature against your team's public keys, its audience tag and its expiry
-  (`src/auth.js`).
+- Every `/api` request must be signed in (`src/auth.js`). Each browser asks for the store password
+  once and gets a session cookie (HttpOnly, Secure, SameSite=Strict) signed with a key derived from
+  the password, good for 90 days. Changing the password signs every browser out. Ten wrong passwords
+  from one address lock it out for 15 minutes, and changes are only accepted from the planner's own
+  page. With Cloudflare Access configured, a valid Access token is accepted too.
 - Uploaded files are stored gzipped, exactly as exported, in `files/<id>`; `manifest.json` lists which
   ones are current. Each browser re-reads the original files, so improvements to the CSV reader apply
   to old uploads too.
@@ -59,5 +61,5 @@ browser, so nothing is ever exposed by a half-finished setup.
 
 ```sh
 node scripts/build.mjs
-npx wrangler dev --var ACCESS_TEAM_DOMAIN:<team domain> --var ACCESS_AUD:<aud tag>
+npx wrangler dev --var APP_PASSWORD:<a test password>
 ```
