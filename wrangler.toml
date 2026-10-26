@@ -3,6 +3,8 @@
 name = "liquor-reorder"
 main = "src/worker.js"
 compatibility_date = "2025-01-01"
+# keep variables added in the Cloudflare dashboard (such as APP_PASSWORD) when a deploy runs
+keep_vars = true
 
 [assets]
 directory = "./public"
