@@ -10,7 +10,7 @@
   --bg:#edf0ed; --surface:#ffffff; --sunk:#f1f4f1; --sunk-2:#e4e9e5; --ink:#132019; --ink-2:#3f4d46; --muted:#66746d; --line:#d9e0db;
   --accent:#1d5c46; --accent-ink:#ffffff; --accent-soft:#e1efe8; --accent-2:#2b7a5e; --tag:#1d5c46; --tag-ink:#ffffff; --tag-hover:#2b7a5e;
   --crit:#b42318; --crit-soft:#fbe7e3; --warn:#8a5a00; --warn-soft:#f8eed4; --ok:#2b7a4b; --ok-soft:#e2f2e7; --idle:#5c6863; --idle-soft:#eceeec;
-  --bar:#1d5c46; --bar-fore:#9fc8b5; --scrim:rgba(12,20,16,.36);
+  --bar:#1d5c46; --bar-fore:#86b8a2; --bar-off:#c3cbc6; --scrim:rgba(12,20,16,.36);
   --ring:0 0 0 1px rgba(19,32,25,.09); --raise:0 0 0 1px rgba(19,32,25,.08),0 1px 2px rgba(19,32,25,.05),0 2px 6px -2px rgba(19,32,25,.06);
   --shadow:0 0 0 1px rgba(19,32,25,.08),0 12px 32px -8px rgba(19,32,25,.22),0 4px 10px -4px rgba(19,32,25,.12);
   --r-lg:12px; --r-md:8px; --r-sm:6px;
@@ -23,14 +23,14 @@
   --bg:#0d1311; --surface:#151c19; --sunk:#1b2420; --sunk-2:#222c28; --ink:#e4ebe7; --ink-2:#b5c2bc; --muted:#899791; --line:#29342f;
   --accent:#7ccaa5; --accent-ink:#0d1311; --accent-soft:#183026; --accent-2:#9bd8bb; --tag:#1f5a44; --tag-ink:#eaf5ef; --tag-hover:#256a51;
   --crit:#f2857a; --crit-soft:#3a1c19; --warn:#e3b04b; --warn-soft:#33290f; --ok:#6cc28f; --ok-soft:#15301f; --idle:#9ba7a2; --idle-soft:#212a27;
-  --bar:#7ccaa5; --bar-fore:#2f5a48; --scrim:rgba(0,0,0,.55);
+  --bar:#7ccaa5; --bar-fore:#2f5a48; --bar-off:#46524d; --scrim:rgba(0,0,0,.55);
   --ring:0 0 0 1px rgba(255,255,255,.08); --raise:0 0 0 1px rgba(255,255,255,.07),0 1px 2px rgba(0,0,0,.4);
   --shadow:0 0 0 1px rgba(255,255,255,.08),0 16px 40px -8px rgba(0,0,0,.6); color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0d1311; --surface:#151c19; --sunk:#1b2420; --sunk-2:#222c28; --ink:#e4ebe7; --ink-2:#b5c2bc; --muted:#899791; --line:#29342f;
   --accent:#7ccaa5; --accent-ink:#0d1311; --accent-soft:#183026; --accent-2:#9bd8bb; --tag:#1f5a44; --tag-ink:#eaf5ef; --tag-hover:#256a51;
   --crit:#f2857a; --crit-soft:#3a1c19; --warn:#e3b04b; --warn-soft:#33290f; --ok:#6cc28f; --ok-soft:#15301f; --idle:#9ba7a2; --idle-soft:#212a27;
-  --bar:#7ccaa5; --bar-fore:#2f5a48; --scrim:rgba(0,0,0,.55);
+  --bar:#7ccaa5; --bar-fore:#2f5a48; --bar-off:#46524d; --scrim:rgba(0,0,0,.55);
   --ring:0 0 0 1px rgba(255,255,255,.08); --raise:0 0 0 1px rgba(255,255,255,.07),0 1px 2px rgba(0,0,0,.4);
   --shadow:0 0 0 1px rgba(255,255,255,.08),0 16px 40px -8px rgba(0,0,0,.6); color-scheme:dark}
 
@@ -244,13 +244,33 @@ td.order b{font-weight:600;font-size:14px;font-variant-numeric:tabular-nums}
   padding-top:max(18px,calc(env(safe-area-inset-top,0px) + 12px));padding-bottom:max(24px,env(safe-area-inset-bottom,0px));padding-left:20px;padding-right:max(20px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
 .drawer-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
 .drawer-head h2{font-family:var(--f-display);font-size:30px;font-weight:600;line-height:1.05}
-.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink-2)}
-.legend span{display:inline-flex;align-items:center;gap:5px}
-.sw{width:12px;height:12px;border-radius:2px;display:inline-block}
+/* charts in item details (dataviz method: thin marks, recessive grid, legend + selective labels, hover + keyboard + table) */
+.viz{display:flex;flex-direction:column;gap:8px}
+.viz-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.viz-head h3{margin:0}
+.legend{display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:2px;display:inline-block}
+.lk{display:inline-block;width:14px;height:0;border-top:2px solid var(--ink-2);border-radius:2px}
+.lk.acc{border-color:var(--bar)}.lk.mute{border-color:var(--muted)}.lk.hair{border-top-width:1px;border-color:var(--warn)}
 .chart{position:relative}
-.chart svg{display:block;width:100%;height:auto}
+.chart svg{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
+.chart svg:focus{outline:none}
+.chart svg:focus-visible{outline:2px solid var(--ink);outline-offset:4px;border-radius:4px}
 .chart text{fill:var(--muted);font-family:var(--f-body);font-size:10.5px;font-variant-numeric:tabular-nums}
-.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;padding:5px 9px;border-radius:var(--r-sm);font-variant-numeric:tabular-nums;white-space:nowrap;transform:translate(-50%,-100%);z-index:2}
+.chart text.lbl{fill:var(--ink-2);font-size:11px}
+.tip{position:absolute;pointer-events:none;background:var(--surface);color:var(--ink);box-shadow:var(--shadow);font-size:12px;padding:7px 10px;border-radius:var(--r-md);white-space:nowrap;transform:translate(-50%,calc(-100% - 8px));z-index:2;display:flex;flex-direction:column;gap:3px;min-width:120px}
+.tip .t-h{color:var(--muted);font-size:11.5px}
+.tip .t-r{display:flex;align-items:center;gap:7px}
+.tip .t-r b{font-variant-numeric:tabular-nums;font-weight:600}
+.tip .t-r i{flex:none;width:12px;height:0;border-top:2px solid currentColor;border-radius:2px}
+.tip .t-r span{color:var(--ink-2)}
+details.viz-table summary{cursor:pointer;font-size:12.5px;color:var(--ink-2);width:max-content}
+details.viz-table .tablewrap{margin-top:8px;max-height:260px;overflow:auto}
+details.viz-table table{width:100%;border-collapse:collapse;font-size:12.5px}
+details.viz-table th,details.viz-table td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+details.viz-table th{position:sticky;top:0;background:var(--surface);color:var(--muted);font-weight:600;font-size:12px}
+details.viz-table td.r,details.viz-table th.r{text-align:right;font-variant-numeric:tabular-nums}
 .math{display:grid;grid-template-columns:minmax(0,1fr) auto;box-shadow:var(--ring);border-radius:var(--r-md);overflow:hidden}
 .math div{padding:9px 13px;border-bottom:1px solid var(--line);font-size:13px}
 .math div:nth-last-child(-n+2){border-bottom:0}
@@ -2620,8 +2640,12 @@ function openDetail(key){
     ${it.buys?`<div><div class="label" style="margin-bottom:6px">Bought from</div><div class="tablewrap"><table class="items plain buys"><thead><tr><th>Distributor</th><th class="r">Units received</th><th class="r">Avg price paid</th><th class="r">Total</th></tr></thead><tbody>${(()=>{const best=Math.min(...it.buys.filter(b=>b.avg>0).map(b=>b.avg));return it.buys.map(b=>`<tr><td>${esc(b.vendor)}${b.vendor===it.vendor?' <span class="chip acc">ordering from</span>':''}${it.buys.length>1&&b.avg>0&&b.avg===best?' <span class="chip ok">lowest price</span>':''}</td><td class="r">${int(b.qty)}</td><td class="r">${b.avg>0?money2(b.avg):'—'}${b.total>0?`<div class="sub m-only">${money2(b.total)} in all</div>`:''}</td><td class="r">${b.total>0?money2(b.total):'—'}</td></tr>`).join('')})()}</tbody></table></div>
       <p class="hint" style="margin-top:6px">From the Item Purchase By Vendor report.${it.vsrc==='purch'?' The distributor you bought the most from is used for orders; change it below.':''}${it.cost>0&&it.buys[0].avg>0&&it.costSrc!=='purch'&&Math.abs(it.buys[0].avg-it.cost)/it.cost>.1?` The average you paid (${money2(it.buys[0].avg)}) differs from the last cost by ${Math.round(Math.abs(it.buys[0].avg-it.cost)/it.cost*100)}%.`:''}</p></div>`:''}
     <div class="row order-row">${r.ord>0?`<span class="on-order">✓ ${qtyShort(r,r.ord)} on your order${r.qdId?' (in a QD)':''}</span><button class="btn small ghost" id="dOff" type="button">Take off the order</button>`:r.held?'<span class="hint">Suppressed: won’t be suggested. Untick “Suppress” below to bring it back.</span>':`<button class="btn primary" id="dAdd" type="button">Add ${qtyShort(r,r.units>0?r.units:stepOf(r))} to your order</button>${r.units>0?'<span class="hint">the suggested amount; change it on the order sheet</span>':''}`}</div>
-    <div><div class="legend"><span><i class="sw" style="background:var(--bar)"></i>Sold per week</span><span><i class="sw" style="background:var(--bar-fore)"></i>Forecast</span><span><i class="sw" style="background:repeating-linear-gradient(45deg,var(--crit) 0 1.5px,var(--crit-soft) 1.5px 4px)"></i>Out of stock, ignored</span></div>
-    <div class="chart" id="chart"></div></div>
+    <section class="viz" aria-labelledby="vzSalesT"><div class="viz-head"><h3 class="label" id="vzSalesT">Sales per week</h3><span class="hint">Last 52 weeks and the next 13</span></div>
+      <div class="legend"><span><i class="sw" style="background:var(--bar)"></i>Sold</span><span><i class="sw" style="background:var(--bar-fore)"></i>Forecast</span><span><i class="sw" style="background:var(--sunk-2)"></i>Out of stock, ignored</span><span><i class="lk"></i>Selling rate${r.base>0?` ${dec1(r.base*7)}/wk`:''}</span></div>
+      <div class="chart" id="chart"></div></section>
+    <section class="viz" aria-labelledby="vzStockT"><div class="viz-head"><h3 class="label" id="vzStockT">Stock ahead</h3><span class="hint" id="vzStockSub"></span></div>
+      <div class="legend" id="vzStockLeg"></div>
+      <div class="chart" id="stockChart"></div></section>
     <div><div class="label" style="margin-bottom:6px">How the order was worked out</div>
     <div class="math">
       <div class="mk">Selling rate<small>${rateLine||'not enough sales history'}${r.adj?` · your adjustment ${r.adj>0?'+':''}${r.adj}%`:''}</small></div><div class="mv">${dec1(r.base*7)}/wk</div>
@@ -2648,6 +2672,7 @@ function openDetail(key){
     </div>
   `);
   drawChart($('#chart',d),r);
+  drawStockChart($('#stockChart',d),r);
   if($('#dAdd'))$('#dAdd').onclick=()=>{setOrder(key,r.units>0?r.units:stepOf(r));toast(`Added ${it.name} to your order`);openDetail(key)};
   if($('#dOff'))$('#dOff').onclick=()=>{setOrder(key,0);toast(`Took ${it.name} off your order`);openDetail(key)};
   const upd=()=>{
@@ -2670,47 +2695,164 @@ function openDetail(key){
   $('#ovOrder').onchange=upd;$('#ovAdj').onchange=upd;$('#ovHold').onchange=upd;$('#ovPack').onchange=upd;$('#ovVendor').onchange=upd;
 }
 
+/* ---------- charts in item details ---------- */
+// clean axis ticks: about four steps, rounded to 1/2/2.5/5/10
+function niceScale(max){
+  max=Math.max(max,1);const raw=max/4,p=Math.pow(10,Math.floor(Math.log10(raw))),n=raw/p;
+  const step=(n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*p;return {step,top:Math.ceil(max/step-1e-9)*step};
+}
+const vizWidth=el=>Math.round(Math.min(640,Math.max(300,el.clientWidth||640)));
+const tickTxt=v=>v>=1000?(v/1000).toFixed(v%1000?1:0)+'K':Number.isInteger(v)?String(v):v.toFixed(1);
+// a column whose data-end is rounded (4px) and whose baseline end is square
+function colPath(x,yTop,w,yBase){
+  const h=yBase-yTop;if(h<=0)return '';const r=Math.min(4,w/2,h);
+  return `M${x},${yBase}V${yTop+r}Q${x},${yTop} ${x+r},${yTop}H${x+w-r}Q${x+w},${yTop} ${x+w},${yTop+r}V${yBase}Z`;
+}
+// one tooltip per chart: value first, label after; rows are built with textContent (names come from files)
+function tipRows(tip,head,rows){
+  tip.replaceChildren();
+  const h=document.createElement('div');h.className='t-h';h.textContent=head;tip.append(h);
+  for(const r of rows){
+    const d=document.createElement('div');d.className='t-r';
+    if(r.color){const k=document.createElement('i');k.style.color=r.color;d.append(k)}
+    const b=document.createElement('b');b.textContent=r.value;const sp=document.createElement('span');sp.textContent=r.label;
+    d.append(b,sp);tip.append(d);
+  }
+}
+// hover, touch and arrow keys all move one cursor over the chart's slots
+function bindViz(el,svg,count,show,startAt){
+  const tip=$('.tip',el);let cur=-1;
+  const place=(i,clientX)=>{
+    if(i<0||i>=count){tip.hidden=true;show(-1);cur=-1;return}
+    cur=i;const at=show(i);tip.hidden=false;
+    const rc=el.getBoundingClientRect(),sc=rc.width/svg.viewBox.baseVal.width;
+    const x=at.x*sc,half=tip.offsetWidth/2+4;
+    tip.style.left=Math.min(rc.width-half,Math.max(half,x))+'px';tip.style.top=Math.max(tip.offsetHeight+10,at.y*sc)+'px';
+  };
+  const idx=e=>{const t=e.target.closest('[data-i]');return t?+t.dataset.i:-1};
+  svg.addEventListener('pointermove',e=>{const i=idx(e);if(i!==cur)place(i)});
+  svg.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')place(-1)});
+  svg.addEventListener('pointerdown',e=>place(idx(e)));
+  svg.addEventListener('focus',()=>place(cur>=0?cur:startAt));
+  svg.addEventListener('blur',()=>place(-1));
+  svg.addEventListener('keydown',e=>{
+    const k=e.key,n=k==='ArrowRight'?cur+1:k==='ArrowLeft'?cur-1:k==='Home'?0:k==='End'?count-1:null;
+    if(n==null)return;e.preventDefault();place(Math.max(0,Math.min(count-1,n)));
+  });
+}
+function vizTable(head,rows){
+  return `<details class="viz-table"><summary>Show as a table</summary><div class="tablewrap"><table><thead><tr>${head.map((h,i)=>`<th class="${i?'r':''}">${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map((c,i)=>`<td class="${i?'r':''}">${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>`;
+}
+
+// Sales per week: one hue for what sold, a lighter step for the forecast, grey for stockout weeks the rate ignores,
+// and the selling rate the order uses as a reference line labelled at its end
 function drawChart(el,r){
   const T=S.res.ctx.T,ctx=S.res.ctx;
-  const bars=[];
+  const slots=[];
   for(let k=51;k>=0;k--){
     const b=T-7*k,a=b-7;let s=0,ex=0,have=0;
     for(let d=a;d<b;d++){const i=d-r.start;if(i<0||i>=r.n)continue;have++;s+=r.arr[i];if(r.exc[i])ex++}
-    bars.push({a,v:have?s:null,oos:ex>=3||r.oosWk.includes(k),ex});
+    slots.push({a,v:have?s:null,oos:ex>=3||r.oosWk.includes(k),ex});
   }
   for(let w=0;w<13;w++){
     const f=r.seasonal?ctx.season(r.it.category,Math.max(0,w*7-3),14):1;
-    bars.push({a:T+7*w,v:r.held?0:r.base*f*7,fc:true});
+    slots.push({a:T+7*w,v:r.held?0:r.base*f*7,fc:true});
   }
-  const W=640,H=210,m={l:34,r:6,t:16,b:24},pw=W-m.l-m.r,ph=H-m.t-m.b;
-  const max=Math.max(1,...bars.map(b=>b.v||0));
-  const step=(()=>{const raw=max/4,p=Math.pow(10,Math.floor(Math.log10(raw))),n=raw/p;return(n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*p})();
-  const top=Math.ceil(max/step)*step;
-  const y=v=>m.t+ph-(v/top)*ph,bw=pw/bars.length;
-  let g=`<defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" style="fill:var(--crit-soft)"/><line x1="0" y1="0" x2="0" y2="5" style="stroke:var(--crit);stroke-width:1.5"/></pattern></defs>`;
-  for(let v=0;v<=top+1e-9;v+=step){g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--line);stroke-width:1"/><text x="${m.l-6}" y="${y(v)+3}" text-anchor="end">${v>=10?int(v):+v.toFixed(1)}</text>`}
+  const rate=r.base*7;
+  // drawn at the width it shows at, so axis text stays 10-11px on a phone instead of shrinking
+  const W=vizWidth(el),H=220,m={l:34,r:12,t:22,b:24},pw=W-m.l-m.r,ph=H-m.t-m.b,base=m.t+ph;
+  const {step,top}=niceScale(Math.max(rate*1.15,...slots.map(b=>b.v||0)));
+  const y=v=>base-(v/top)*ph,sw=pw/slots.length,bw=Math.min(24,Math.max(2,sw-2));
+  let g='';
+  for(let v=0;v<=top+1e-9;v+=step)g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--line);stroke-width:1"/><text x="${m.l-6}" y="${y(v)+3.5}" text-anchor="end">${tickTxt(v)}</text>`;
+  g+=`<rect class="cur" x="0" y="${m.t}" width="${sw}" height="${ph}" style="fill:var(--accent-soft)" opacity="0"/>`;
   let lastLbl=-99;
-  bars.forEach((b,i)=>{
-    const x=m.l+i*bw;
-    if(b.oos)g+=`<rect x="${x}" y="${m.t}" width="${bw}" height="${ph}" fill="url(#hatch)" opacity=".55"/>`;
-    if(b.v){const h=Math.max(1,ph*(b.v/top));g+=`<rect x="${x+1}" y="${m.t+ph-h}" width="${Math.max(1.5,bw-2)}" height="${h}" rx="1.5" style="fill:${b.fc?'var(--bar-fore)':'var(--bar)'}"/>`}
+  slots.forEach((b,i)=>{
+    const x=m.l+i*sw,bx=x+(sw-bw)/2;
+    if(b.oos)g+=`<rect x="${x}" y="${m.t}" width="${sw}" height="${ph}" style="fill:var(--sunk-2)"/>`;
+    if(b.v>0)g+=`<path d="${colPath(bx,y(b.v),bw,base)}" style="fill:${b.fc?'var(--bar-fore)':b.oos?'var(--bar-off)':'var(--bar)'}"/>`;
     const p=dParts(b.a),pp=dParts(b.a-7);
-    if((i===0||p.m!==pp.m)&&x-lastLbl>=46){g+=`<text x="${x+1}" y="${H-8}">${new Date(b.a*DAY).toLocaleDateString('en-US',{month:'short',timeZone:'UTC'})}${p.m===1||i===0?' ’'+String(p.y).slice(2):''}</text>`;lastLbl=x}
+    if((i===0||p.m!==pp.m)&&x-lastLbl>=44&&x<=W-m.r-36){g+=`<text x="${x}" y="${H-7}">${new Date(b.a*DAY).toLocaleDateString('en-US',{month:'short',timeZone:'UTC'})}${p.m===1||i===0?' ’'+String(p.y).slice(2):''}</text>`;lastLbl=x}
   });
-  const tx=m.l+52*bw;
-  g+=`<line x1="${tx}" x2="${tx}" y1="${m.t-6}" y2="${m.t+ph}" style="stroke:var(--ink-2);stroke-width:1;stroke-dasharray:3 3"/><text x="${tx+4}" y="${m.t-6}" style="fill:var(--ink-2)">Today</text>`;
-  g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${m.t+ph}" y2="${m.t+ph}" style="stroke:var(--muted);stroke-width:1"/>`;
-  bars.forEach((b,i)=>{g+=`<rect class="hit" data-i="${i}" x="${m.l+i*bw}" y="${m.t}" width="${bw}" height="${ph}" fill="transparent"/>`});
-  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Weekly sales for the last 52 weeks and forecast for the next 13">${g}</svg><div class="tip" hidden></div>`;
-  const tip=$('.tip',el),svg=$('svg',el);
-  svg.addEventListener('mousemove',e=>{
-    const t=e.target.closest('.hit');if(!t){tip.hidden=true;return}
-    const b=bars[+t.dataset.i];
-    tip.textContent=b.fc?`Forecast, week of ${fmtDayShort(b.a)}: about ${dec1(b.v)}`:b.v==null?`Week of ${fmtDayShort(b.a)}: no history yet`:`Week of ${fmtDayShort(b.a)}: ${dec1(b.v)} sold${b.ex?`, out of stock ${b.ex} of 7 days`:''}`;
-    const rc=el.getBoundingClientRect(),tr=t.getBoundingClientRect();
-    tip.hidden=false;tip.style.left=Math.min(rc.width-90,Math.max(90,tr.left-rc.left+tr.width/2))+'px';tip.style.top=(tr.top-rc.top+6)+'px';
-  });
-  svg.addEventListener('mouseleave',()=>tip.hidden=true);
+  g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${base}" y2="${base}" style="stroke:var(--muted);stroke-width:1"/>`;
+  const tx=m.l+52*sw;
+  g+=`<line x1="${tx}" x2="${tx}" y1="${m.t-8}" y2="${base}" style="stroke:var(--ink-2);stroke-width:1"/><text class="lbl" x="${tx+5}" y="${m.t-10}">Today</text>`;
+  if(rate>0){
+    const ry=y(rate);
+    g+=`<line x1="${m.l}" x2="${tx}" y1="${ry}" y2="${ry}" style="stroke:var(--ink-2);stroke-width:2;stroke-linecap:round"/>`;
+  }
+  slots.forEach((b,i)=>{g+=`<rect data-i="${i}" x="${m.l+i*sw}" y="${m.t-8}" width="${sw}" height="${ph+8}" fill="transparent"/>`});
+  const desc=`Weekly sales for ${esc(r.it.name)}: ${slots.filter(b=>!b.fc&&b.v!=null).length} weeks of history${rate>0?`, selling rate ${dec1(rate)} a week`:''}, forecast for 13 weeks. Use the left and right arrow keys to read each week.`;
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" tabindex="0" aria-label="${desc}">${g}</svg><div class="tip" hidden role="status"></div>`+
+    vizTable(['Week of','Sold','Note'],slots.map(b=>[fmtDayShort(b.a),b.v==null?'—':dec1(b.v),b.fc?'forecast':b.oos?'out of stock, ignored':''])) ;
+  const svg=$('svg',el),cur=$('.cur',svg),tip=$('.tip',el);
+  bindViz(el,svg,slots.length,i=>{
+    if(i<0){cur.setAttribute('opacity','0');return}
+    const b=slots[i],x=m.l+i*sw;cur.setAttribute('x',x);cur.setAttribute('opacity','1');
+    const wk=`${b.fc?'Forecast · ':''}week of ${fmtDayShort(b.a)}`;
+    const rows=b.fc?[{value:dec1(b.v),label:'expected',color:'var(--bar-fore)'}]:b.v==null?[{value:'—',label:'no history yet'}]:
+      [{value:dec1(b.v),label:b.oos?`sold, out of stock${b.ex?` ${b.ex} of 7 days`:''}; ignored`:'sold',color:b.oos?'var(--bar-off)':'var(--bar)'}];
+    if(!b.fc&&rate>0)rows.push({value:dec1(rate),label:'selling rate',color:'var(--ink-2)'});
+    tipRows(tip,wk.charAt(0).toUpperCase()+wk.slice(1),rows);
+    return {x:x+sw/2,y:b.v>0?y(b.v):base};
+  },51);
+}
+
+// Stock ahead: what's on the shelf day by day if you order nothing, and with the suggested order arriving after the lead time
+function drawStockChart(el,r){
+  const it=r.it,ctx=S.res.ctx,L=r.L,R=r.R;
+  const sub=$('#vzStockSub'),leg=$('#vzStockLeg');
+  if(!(r.base>0)){el.innerHTML='<p class="hint">No recent sales, so there’s nothing to project.</p>';if(sub)sub.textContent='';if(leg)leg.innerHTML='';return}
+  const days=Math.min(91,Math.max(42,Math.ceil((L+R+14)/7)*7)),units=r.held?0:r.units;
+  const daily=d=>r.base*(r.seasonal?ctx.season(it.category,Math.floor(d/7)*7,7):1);
+  const start=Math.max(0,r.position),without=[],withO=[];
+  let a=start,b=start;
+  for(let d=0;d<=days;d++){
+    if(d===L&&units>0)b+=units;
+    without.push(a);withO.push(b);
+    const q=daily(d);a=Math.max(0,a-q);b=Math.max(0,b-q);
+  }
+  const both=units>0;
+  if(sub)sub.textContent=`Next ${days/7} weeks at ${dec1(r.base*7)} a week`;
+  if(leg)leg.innerHTML=both?`<span><i class="lk acc"></i>With this order (${qtyShort(r,units)} arriving day ${L})</span><span><i class="lk mute"></i>If you don’t order</span>${r.ss>0?'<span><i class="lk hair"></i>Safety stock</span>':''}`:`<span><i class="lk mute"></i>If you don’t order</span>${r.ss>0?'<span><i class="lk hair"></i>Safety stock</span>':''}`;
+  const W=vizWidth(el),H=200,m={l:34,r:12,t:16,b:24},pw=W-m.l-m.r,ph=H-m.t-m.b,base=m.t+ph;
+  const {step,top}=niceScale(Math.max(...withO,r.ss*1.2,1));
+  const every=pw/(days/7)<64?14:7;
+  const x=d=>m.l+(d/days)*pw,y=v=>base-(v/top)*ph;
+  let g='';
+  for(let v=0;v<=top+1e-9;v+=step)g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--line);stroke-width:1"/><text x="${m.l-6}" y="${y(v)+3.5}" text-anchor="end">${tickTxt(v)}</text>`;
+  for(let d=0;d<=days;d+=every){const dt=ctx.T+d;g+=`<text x="${x(d)}" y="${H-7}" text-anchor="${d===0?'start':d>=days-3?'end':'middle'}">${d===0?'Today':fmtDayShort(dt)}</text>`}
+  g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${base}" y2="${base}" style="stroke:var(--muted);stroke-width:1"/>`;
+  if(r.ss>0)g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(r.ss)}" y2="${y(r.ss)}" style="stroke:var(--warn);stroke-width:1"/>`;
+  const path=arr=>arr.map((v,d)=>`${d?'L':'M'}${x(d).toFixed(1)},${y(v).toFixed(1)}`).join('');
+  g+=`<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${base}" style="stroke:var(--ink-2);stroke-width:1" opacity="0"/>`;
+  g+=`<path d="${path(without)}" style="fill:none;stroke:var(--muted);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>`;
+  if(both){
+    g+=`<path d="${path(withO)}L${x(days)},${base}L${x(0)},${base}Z" style="fill:var(--bar);opacity:.1"/>`;
+    g+=`<path d="${path(withO)}" style="fill:none;stroke:var(--bar);stroke-width:2;stroke-linejoin:round;stroke-linecap:round"/>`;
+  }
+  // selective labels: where the shelf empties without an order, and where the order lands
+  const out=without.findIndex(v=>v<=1e-9);
+  if(out>0&&out<days)g+=`<circle cx="${x(out)}" cy="${base}" r="4" style="fill:var(--muted);stroke:var(--surface);stroke-width:2"/><text class="lbl" x="${x(out)}" y="${base-10}" text-anchor="${out>days*.8?'end':'middle'}" style="paint-order:stroke;stroke:var(--surface);stroke-width:3px">Runs out ${fmtDayShort(ctx.T+out)}</text>`;
+  if(both&&L<=days)g+=`<circle cx="${x(L)}" cy="${y(withO[L])}" r="4" style="fill:var(--bar);stroke:var(--surface);stroke-width:2"/><text class="lbl" x="${x(L)+8}" y="${y(withO[L])-6}" style="paint-order:stroke;stroke:var(--surface);stroke-width:3px">Order arrives</text>`;
+  g+=`<circle class="d1" r="4" opacity="0" style="fill:var(--muted);stroke:var(--surface);stroke-width:2"/><circle class="d2" r="4" opacity="0" style="fill:var(--bar);stroke:var(--surface);stroke-width:2"/>`;
+  const sw=pw/days;
+  for(let d=0;d<=days;d++)g+=`<rect data-i="${d}" x="${x(d)-sw/2}" y="${m.t}" width="${sw}" height="${ph}" fill="transparent"/>`;
+  const desc=`Projected stock for ${esc(it.name)} over ${days/7} weeks.${out>0&&out<days?` Without an order it runs out about ${fmtDayShort(ctx.T+out)}.`:''}${both?` With ${qtyShort(r,units)} arriving in ${L} days it has ${int(withO[days])} left at the end.`:''} Use the left and right arrow keys to read each day.`;
+  const wk=[];for(let d=0;d<=days;d+=7)wk.push([d===0?'Today':fmtDayShort(ctx.T+d),int(without[d]),...(both?[int(withO[d])]:[])]);
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" tabindex="0" aria-label="${desc}">${g}</svg><div class="tip" hidden role="status"></div>`+vizTable(['Day','If you don’t order',...(both?['With this order']:[])],wk);
+  const svg=$('svg',el),xh=$('.xh',svg),d1=$('.d1',svg),d2=$('.d2',svg),tip=$('.tip',el);
+  bindViz(el,svg,days+1,i=>{
+    if(i<0){[xh,d1,d2].forEach(n=>n.setAttribute('opacity','0'));return}
+    const X=x(i);xh.setAttribute('x1',X);xh.setAttribute('x2',X);xh.setAttribute('opacity','1');
+    d1.setAttribute('cx',X);d1.setAttribute('cy',y(without[i]));d1.setAttribute('opacity','1');
+    if(both){d2.setAttribute('cx',X);d2.setAttribute('cy',y(withO[i]));d2.setAttribute('opacity','1')}
+    const rows=[];
+    if(both)rows.push({value:int(withO[i]),label:'with this order',color:'var(--bar)'});
+    rows.push({value:int(without[i]),label:'if you don’t order',color:'var(--muted)'});
+    tipRows(tip,i===0?'Today':`${fmtDayShort(ctx.T+i)} · day ${i}`,rows);
+    return {x:X,y:y(Math.max(withO[i],without[i]))};
+  },0);
 }
 
 function openSettings(){
