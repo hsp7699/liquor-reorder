@@ -38,6 +38,14 @@
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 p{text-wrap:pretty}
+::selection{background:var(--accent-soft);color:var(--ink)}
+input,textarea{caret-color:var(--accent)}
+input[type=checkbox],input[type=radio]{accent-color:var(--accent)}
+.ic{flex:none;display:inline-block;vertical-align:-2px}
+.fbar{display:contents}
+.m-meta,.m-only{display:none}
+.pop-scrim{display:none}
+#mapper:empty{display:none}
 .wrap{max-width:1320px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 56px;display:flex;flex-direction:column;gap:18px}
 h1,h2,h3{margin:0;text-wrap:balance}
 .num,.mono{font-variant-numeric:tabular-nums}
@@ -87,8 +95,9 @@ body.gated #btnSettings,body.gated #syncStatus{display:none}
 .files-sum{flex:1;min-width:0;color:var(--ink-2);font-size:13px}
 .files-sum .chip{margin-left:6px}
 .files-act{font-size:13px;font-weight:500;color:var(--accent);white-space:nowrap}
-.files-act::after{content:' ▴'}
-.files-panel.closed .files-act::after{content:' ▾'}
+.files-act{display:inline-flex;align-items:center;gap:4px}
+.files-act .ic{transform:rotate(180deg);transition:transform .2s var(--ease-out)}
+.files-panel.closed .files-act .ic{transform:none}
 .files-body{display:flex;flex-direction:column;gap:12px}
 .files-panel.closed .files-body{display:none}
 .sources{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
@@ -141,7 +150,8 @@ details.unmatched ul{margin:6px 0 0;padding-left:18px;font-size:12.5px;color:var
 .kpi .k{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-2);font-weight:500}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--idle);flex:none}
 .dot.ok{background:var(--ok)}.dot.crit{background:var(--crit)}.dot.warn{background:var(--warn)}.dot.acc{background:var(--accent)}
-.kpi .v{font-family:var(--f-display);font-weight:600;font-size:36px;line-height:1.05;letter-spacing:-.005em;font-variant-numeric:tabular-nums}
+.kpi .v{font-family:var(--f-display);font-weight:600;font-size:28px;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi:first-child .v{font-size:36px;line-height:1.02}
 .kpi .s{font-size:12px;color:var(--muted)}
 
 /* tabs + filters */
@@ -149,6 +159,7 @@ details.unmatched ul{margin:6px 0 0;padding-left:18px;font-size:12.5px;color:var
 .tab{border:0;background:none;padding:10px 14px 9px;min-height:42px;cursor:pointer;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;transition:color .15s ease,border-color .15s ease}
 .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
 @media (hover:hover){.tab:not([aria-selected="true"]):hover{color:var(--ink-2)}}
+.tabs{scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}
 .tab .c{font-size:11.5px;font-variant-numeric:tabular-nums;background:var(--sunk-2);border-radius:999px;padding:1px 7px;margin-left:5px;color:var(--ink-2)}
 .tab[aria-selected="true"] .c{background:var(--accent-soft);color:var(--accent)}
 .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -156,7 +167,7 @@ details.unmatched ul{margin:6px 0 0;padding-left:18px;font-size:12.5px;color:var
 .filters input{flex:1 1 220px}
 .filters .spacer{flex:1}
 .msel{position:relative}
-.msel-btn{min-height:36px;padding:7px 12px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);cursor:pointer;white-space:nowrap;max-width:240px;overflow:hidden;text-overflow:ellipsis;transition:border-color .15s ease,background-color .15s ease}
+.msel-btn{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:7px 12px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);cursor:pointer;white-space:nowrap;max-width:240px;overflow:hidden;text-overflow:ellipsis;transition:border-color .15s ease,background-color .15s ease}
 @media (hover:hover){.msel-btn:hover{border-color:var(--muted)}}
 .msel-btn.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent);font-weight:500}
 .msel-pop{min-width:280px}
@@ -180,7 +191,7 @@ table.items th{font-size:12px;color:var(--muted);font-weight:600;text-align:left
 table.items th[data-sort]{cursor:pointer}
 @media (hover:hover){table.items th[data-sort]:hover{color:var(--ink)}}
 table.items th.r,table.items td.r{text-align:right}
-table.items th .arr{color:var(--accent)}
+table.items th .arr{color:var(--accent);display:inline-flex;vertical-align:-1px}
 table.items td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
 table.items tbody tr{cursor:pointer}
 @media (hover:hover){table.items tbody tr:hover td{background:var(--sunk)}}
@@ -288,7 +299,7 @@ table.items.plain tbody tr{cursor:default}
 #quick{overflow:visible}
 .results{max-height:min(340px,50vh);overflow-y:auto;overscroll-behavior:contain;background:var(--surface)}
 .stepper{display:inline-flex;align-items:stretch;box-shadow:var(--ring);border-radius:var(--r-md);overflow:hidden;background:var(--surface)}
-.stepper button{border:0;background:var(--sunk);width:34px;min-height:34px;font-size:16px;cursor:pointer;color:var(--ink);transition:background-color .12s ease}
+.stepper button{display:grid;place-items:center;border:0;background:var(--sunk);width:34px;min-height:34px;font-size:16px;cursor:pointer;color:var(--ink);transition:background-color .12s ease}
 .stepper button:active{background:var(--sunk-2)}
 @media (hover:hover){.stepper button:hover{background:var(--accent-soft)}}
 @media (pointer:coarse){.stepper button{width:40px;min-height:40px}}
@@ -322,7 +333,7 @@ tr.qd-head.rest:hover td{background:var(--sunk)}
 .qf-checks{display:flex;gap:14px;flex-wrap:wrap;padding-bottom:7px}
 .mixctl{position:relative;display:inline-flex;align-items:center;gap:2px}
 .mixctl.off .check{color:var(--muted);opacity:.6}
-.caret{position:relative;border:1px solid var(--line);background:var(--surface);border-radius:var(--r-sm);width:26px;height:26px;cursor:pointer;color:var(--ink-2);font-size:12px;line-height:1;padding:0}
+.caret{display:inline-grid;place-items:center;position:relative;border:1px solid var(--line);background:var(--surface);border-radius:var(--r-sm);width:26px;height:26px;cursor:pointer;color:var(--ink-2);font-size:12px;line-height:1;padding:0}
 .caret::after{content:"";position:absolute;inset:-7px}
 @media (hover:hover){.caret:hover:not(:disabled){border-color:var(--muted)}}
 .caret:disabled{opacity:.4;cursor:default}
@@ -337,7 +348,63 @@ tr.qd-head.rest:hover td{background:var(--sunk)}
 .claude-box{border:1px dashed var(--line);border-radius:var(--r-lg);padding:12px;display:flex;flex-direction:column;gap:8px}
 .claude-box textarea{width:100%;min-height:70px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);font:inherit;font-size:13px}
 textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12px;border:1px solid var(--line);border-radius:6px;padding:8px;background:var(--sunk);color:var(--ink)}
-@media (max-width:600px){.brand h1{font-size:28px}.kpi .v{font-size:28px}.kpi{padding:12px 14px}.kpis{grid-template-columns:1fr 1fr}.kpi:last-child:nth-child(odd){grid-column:1/-1}}
+/* ---------- phone: list rows, one swipeable strip of figures, filters in one row, menus as bottom sheets ---------- */
+@media (max-width:640px){
+  .wrap{gap:14px;padding-top:14px}
+  .top{flex-wrap:nowrap;align-items:flex-start}.brand{min-width:0}.brand h1{font-size:26px}.brand p{font-size:12.5px}
+  .files-head{padding:10px 14px;min-height:48px}.files-sum{display:none}.files-act{margin-left:auto}
+  .kpis{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain}
+  .kpis::-webkit-scrollbar{display:none}
+  .kpi{flex:0 0 42%;scroll-snap-align:start;padding:12px 14px}
+  .kpi .v{font-size:24px}.kpi:first-child .v{font-size:30px}
+  .kpi .s{display:none}
+  .tabs{margin-inline:-16px;padding-inline:8px}
+  .filters{gap:10px}.filters input{flex:1 1 100%;min-height:44px}
+  .fbar{display:flex;gap:8px;overflow-x:auto;flex-wrap:nowrap;width:calc(100% + 32px);margin-inline:-16px;padding:0 16px 2px;scrollbar-width:none}
+  .fbar::-webkit-scrollbar{display:none}
+  .fbar>*{flex:none}.fbar .spacer{display:none}
+  .msel-btn,.fbar .btn{min-height:40px}
+  .totals{font-size:12.5px;gap:14px;margin:-4px -16px 0;padding:0 16px;flex-wrap:nowrap;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+  .totals::-webkit-scrollbar{display:none}
+  /* item tables become two-line rows: name and key figure, then the rest in grey and the action */
+  .tablewrap.grid{max-height:none;overflow:visible}
+  table.items.list{min-width:0;display:block}
+  table.items.list thead{display:none}
+  table.items.list tbody{display:block}
+  table.items.list tbody tr:not(.qd-head){display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"item key" "meta act";align-items:start;gap:8px 12px;padding:13px 14px;border-bottom:1px solid var(--line)}
+  table.items.list tbody tr:last-child{border-bottom:0}
+  table.items.list td{display:none;padding:0;border:0;position:static!important;box-shadow:none!important;background:none!important}
+  table.items.list td:first-child{display:block;grid-area:item;min-width:0}
+  table.items.list td.order,table.items.list td.key{display:block;grid-area:key;text-align:right}
+  table.items.list td.c-notes,table.items.list td.c-days,table.items.list td.c-total{display:block;grid-area:meta;align-self:center}
+  table.items.list td.act,table.items.list td.c-rm{display:flex;grid-area:act;justify-content:flex-end;align-items:center}
+  table.items.list td.c-days::before{content:"Days of supply after ";color:var(--muted)}
+  table.items.list td.c-days{text-align:left}
+  table.items.list td.c-total::before{content:"Total ";color:var(--muted)}
+  table.items.list td.c-total{text-align:left}
+  table.items.list tr.qd-head{display:block}table.items.list tr.qd-head td{display:block;padding:10px 14px}
+  .m-meta{display:flex;flex-wrap:wrap;gap:3px 12px;margin-top:5px;font-size:12.5px;color:var(--ink-2)}
+  .m-meta span{white-space:nowrap}
+  .m-only{display:block}
+  .act-btns{flex-direction:row;align-items:center;gap:6px}
+  .btn.add{min-height:40px}
+  .x.rm{display:inline-grid;place-items:center;min-width:40px;min-height:40px}
+  .buys th:nth-child(4),.buys td:nth-child(4){display:none}
+  .stepper input{width:46px}
+  .sheet-head{padding:12px 14px}.sheet-head h3{font-size:21px}
+  .quick-form{padding:14px;gap:12px}.quick-form .field{flex:1 1 100%}.qf-checks{padding-bottom:0}
+  .qq-bar{padding:12px 14px}.qq-bar .row{width:100%}.qq-bar .row .btn{flex:1}
+  .drawer{padding-left:16px;padding-right:16px}.drawer-head h2{font-size:26px}
+  .facts{grid-template-columns:1fr 1fr}
+  /* menus open as bottom sheets: they never get cut off and sit under the thumb */
+  .mixpop,.msel-pop,.exp-pop{position:fixed;left:0;right:0;top:auto;bottom:0;width:auto;min-width:0;max-width:none;max-height:min(72vh,560px);border-radius:16px 16px 0 0;padding:16px 16px max(18px,env(safe-area-inset-bottom));z-index:31}
+  .mixpop .check,.msel-pop .check{min-height:40px;align-items:center}
+  .exp-pop .btn{min-height:44px}
+  body.pop-open .pop-scrim{display:block;position:fixed;inset:0;background:var(--scrim);z-index:30}
+}
+@media (max-width:640px) and (prefers-reduced-motion:no-preference){
+  .mixpop:not(.msel-pop),.msel-pop.enter{animation:sheet .24s var(--ease-out)}@keyframes sheet{from{transform:translateY(24px);opacity:0}}
+}
 @media (prefers-reduced-motion:no-preference){
   .drawer{animation:slide .22s var(--ease-out)}@keyframes slide{from{transform:translateX(32px);opacity:0}}
   .scrim{animation:fade .2s ease-out}@keyframes fade{from{opacity:0}}
@@ -375,7 +442,7 @@ textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12
   </div>
 
   <section class="files-panel" id="filesPanel">
-  <button class="files-head" id="filesToggle" type="button" aria-expanded="true" aria-controls="filesBody"><span class="label">Your files</span><span class="files-sum" id="filesSum"></span><span class="files-act" id="filesAct">Hide</span></button>
+  <button class="files-head" id="filesToggle" type="button" aria-expanded="true" aria-controls="filesBody"><span class="label">Your files</span><span class="files-sum" id="filesSum"></span><span class="files-act"><span id="filesAct">Hide</span><svg class="ic" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></span></button>
   <div class="files-body" id="filesBody">
   <div class="sources">
     <div class="src" id="srcInv">
@@ -410,20 +477,23 @@ textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12
   </div>
   <div class="filters" id="filters">
     <input type="search" id="q" placeholder="Search item, SKU or UPC" aria-label="Search items">
+    <div class="fbar">
     <div class="msel" id="fVendor"></div>
     <div class="msel" id="fCat"></div>
     <div class="msel" id="fFlag"></div>
     <button class="btn ghost small" id="fReset" type="button" hidden>Clear filters</button>
     <span class="spacer"></span>
-    <div class="msel" id="exportWrap"><button class="btn" id="btnExport" type="button" aria-haspopup="true" aria-expanded="false">Export ▾</button><div class="mixpop msel-pop exp-pop" id="exportPop" hidden></div></div>
+    <div class="msel" id="exportWrap"><button class="btn" id="btnExport" type="button" aria-haspopup="true" aria-expanded="false">Export <svg class="ic" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button><div class="mixpop msel-pop exp-pop" id="exportPop" hidden></div></div>
     <button class="btn ghost" id="btnClearOrder" type="button" hidden>Clear order</button>
     <button class="btn" id="btnExportAll" type="button">Download all orders (CSV)</button>
+    </div>
   </div>
   <div class="totals" id="totals" hidden></div>
   <div id="view"></div>
 </div>
 
 <div id="overlay" hidden></div>
+<div class="pop-scrim" id="popScrim"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -470,6 +540,9 @@ function setOrder(key,units){
 }
 // order changes reuse the forecast; only the deal and order quantities are applied again
 function refreshOrders(){if(!S.res){recompute();return}applyDeals();renderAll()}
+// one drawn icon set (16px grid, 1.6 stroke) instead of text glyphs
+const ICONS={down:'<path d="m4 6 4 4 4-4"/>',up:'<path d="m4 10 4-4 4 4"/>',x:'<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>',minus:'<path d="M4 8h8"/>',plus:'<path d="M8 4v8M4 8h8"/>'};
+const ic=(n,size=14)=>`<svg class="ic" viewBox="0 0 16 16" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
 const qtyShort=(r,u)=>r.byCase?`${int(u/r.pack)} cs`:`${int(u)} unit${u===1?'':'s'}`;
 const samplerP=(window.claude&&window.claude.use)?window.claude.use('sample').catch(()=>null):Promise.resolve(null);
 const deptOf=d=>Object.assign({vendor:'',skip:/^(misc fee|fees?)$/i.test(d)},deptCfg[d]||{});
@@ -1514,7 +1587,7 @@ function renderSources(){
   // newest first; long histories collapse to the latest few
   const order=S.sales.map((f,i)=>i).sort((a,b)=>S.sales[b].from-S.sales[a].from);
   const showAll=S.showAllFiles||order.length<=6;
-  const li=i=>{const f=S.sales[i];return `<li><span>${esc(f.fileName)}</span><small>${ovl.has(i)?'<span class="chip warn">Overlaps another file</span> ':''}${f.from===f.to?fmtDay(f.from):fmtDayShort(f.from)+' – '+fmtDay(f.to)}${S.sample?'':` <button class="x" data-rm="${i}" type="button" aria-label="Remove ${esc(f.fileName)}">×</button>`}</small></li>`};
+  const li=i=>{const f=S.sales[i];return `<li><span>${esc(f.fileName)}</span><small>${ovl.has(i)?'<span class="chip warn">Overlaps another file</span> ':''}${f.from===f.to?fmtDay(f.from):fmtDayShort(f.from)+' – '+fmtDay(f.to)}${S.sample?'':` <button class="x" data-rm="${i}" type="button" aria-label="Remove ${esc(f.fileName)}">${ic('x')}</button>`}</small></li>`};
   $('#salesFiles').innerHTML=S.sales.length?(showAll?order:order.slice(0,4)).map(li).join('')+(showAll?'':`<li><button class="btn ghost small" id="btnAllFiles" type="button">Show all ${order.length} files</button></li>`):'<li><span>No files loaded</span></li>';
   const bf=$('#btnAllFiles');if(bf)bf.onclick=()=>{S.showAllFiles=true;renderSources()};
   $('#btnClear').hidden=S.sample;
@@ -1712,9 +1785,10 @@ function mselLabel(id){
 function renderMsel(id){
   const f=FILTERS[id],box=$('#'+f.el),open=openMsel===id;
   box.dataset.sel=S[id].join('|');
-  box.innerHTML=`<button class="msel-btn${S[id].length?' on':''}" type="button" aria-haspopup="true" aria-expanded="${open}" title="${esc(S[id].length>1?S[id].map(k=>(f.opts.find(o=>o.k===k)||{label:k}).label).join(', '):'Filter by '+f.one)}">${esc(mselLabel(id))} ▾</button><div class="mixpop msel-pop${mselJust===id?' enter':''}" role="group" aria-label="Filter by ${f.one}"${open?'':' hidden'}></div>`;
-  $('.msel-btn',box).onclick=e=>{e.stopPropagation();const was=openMsel===id;closeMsel();if(!was){openMsel=id;mselJust=id;renderMsel(id);mselJust='';const s=$('.msel-pop input[type=search]',box)||$('.msel-pop input',box);if(s)s.focus()}};
+  box.innerHTML=`<button class="msel-btn${S[id].length?' on':''}" type="button" aria-haspopup="true" aria-expanded="${open}" title="${esc(S[id].length>1?S[id].map(k=>(f.opts.find(o=>o.k===k)||{label:k}).label).join(', '):'Filter by '+f.one)}"><span class="lbl">${esc(mselLabel(id))}</span>${ic('down')}</button><div class="mixpop msel-pop${mselJust===id?' enter':''}" role="group" aria-label="Filter by ${f.one}"${open?'':' hidden'}></div>`;
+  $('.msel-btn',box).onclick=e=>{e.stopPropagation();const was=openMsel===id;closeMsel();if(!was){openMsel=id;mselJust=id;renderMsel(id);mselJust='';const s=$('.msel-pop input[type=search]',box)||$('.msel-pop input',box);if(s)(matchMedia('(pointer:fine)').matches?s:$('.msel-pop input[type=checkbox]',box)||s).focus({preventScroll:true})}};
   if(open)renderMselPop(id);
+  syncPopScrim();
   $('#fReset').hidden=!Object.keys(FILTERS).some(k=>S[k].length);
 }
 function renderMselPop(id,q=''){
@@ -1729,7 +1803,7 @@ function renderMselPop(id,q=''){
   if(srch)srch.oninput=()=>{renderMselPop(id,srch.value);const s2=$('input[type=search]',pop);s2.focus();s2.setSelectionRange(s2.value.length,s2.value.length)};
   $$('.msel-list input',pop).forEach(c=>c.onchange=()=>{
     S[id]=c.checked?[...S[id],c.value]:S[id].filter(v=>v!==c.value);S.limit=200;box.dataset.sel=S[id].join('|');
-    const btn=$('.msel-btn',box);btn.firstChild.textContent=mselLabel(id)+' ▾';btn.classList.toggle('on',S[id].length>0);
+    const btn=$('.msel-btn',box);$('.lbl',btn).textContent=mselLabel(id);btn.classList.toggle('on',S[id].length>0);
     $('#fReset').hidden=!Object.keys(FILTERS).some(k=>S[k].length);
     renderView();
   });
@@ -1741,13 +1815,14 @@ function closeMsel(focus){
   const id=openMsel;openMsel='';
   if(id){renderMsel(id);if(focus)$('.msel-btn',$('#'+FILTERS[id].el)).focus()}
   const ep=$('#exportPop');if(ep&&!ep.hidden){ep.hidden=true;$('#btnExport').setAttribute('aria-expanded','false');if(focus)$('#btnExport').focus()}
+  syncPopScrim();
 }
 document.addEventListener('click',()=>closeMsel());
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&(openMsel||!$('#exportPop').hidden))closeMsel(true)});
 
 function th(view,k,label,right){
   const [sk,dir]=S.sort[view];
-  return `<th${k?` data-sort="${k}"`:''} class="${right?'r':''}" ${k?`aria-sort="${sk===k?(dir>0?'ascending':'descending'):'none'}"`:''}>${label}${sk===k?` <span class="arr">${dir>0?'▲':'▼'}</span>`:''}</th>`;
+  return `<th${k?` data-sort="${k}"`:''} class="${right?'r':''}" ${k?`aria-sort="${sk===k?(dir>0?'ascending':'descending'):'none'}"`:''}>${label}${sk===k?` <span class="arr">${ic(dir>0?'up':'down',12)}</span>`:''}</th>`;
 }
 function orderCell(r){
   if(!r.units)return '<td class="r order"><span class="sub">—</span></td>';
@@ -1755,7 +1830,7 @@ function orderCell(r){
 }
 // last column on the Reorder and All items lists: add the item, or see what's already on the order
 function actionCell(r){
-  if(r.ord>0)return `<td class="r act"><div class="on-order"><span>✓ ${qtyShort(r,r.ord)}</span><button class="x rm" type="button" data-unadd="${esc(r.key)}" aria-label="Take ${esc(r.it.name)} off your order" title="Take off your order">×</button></div>${r.qdId?'<div class="sub">in a QD</div>':''}</td>`;
+  if(r.ord>0)return `<td class="r act"><div class="on-order"><span>✓ ${qtyShort(r,r.ord)}</span><button class="x rm" type="button" data-unadd="${esc(r.key)}" aria-label="Take ${esc(r.it.name)} off your order" title="Take off your order">${ic('x')}</button></div>${r.qdId?'<div class="sub">in a QD</div>':''}</td>`;
   if(r.held)return `<td class="r act"><div class="act-btns"><span class="sub">Suppressed</span><button class="btn ghost small sup" type="button" data-unsup="${esc(r.key)}" title="Start suggesting this item again">Unsuppress</button></div></td>`;
   const u=r.units>0?r.units:stepOf(r);
   return `<td class="r act"><div class="act-btns"><button class="btn small add" type="button" data-add="${esc(r.key)}" data-u="${u}">Add ${qtyShort(r,u)}</button><button class="btn ghost small sup" type="button" data-sup="${esc(r.key)}" title="Stop suggesting this item in future orders">Suppress</button></div></td>`;
@@ -1774,7 +1849,9 @@ function bindOrderButtons(el){
   $$('[data-ostep]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const r=S.res.byKey.get(b.dataset.k);setOrder(r.key,r.ord+(+b.dataset.ostep)*stepOf(r))});
   $$('[data-oqty]',el).forEach(i=>{i.onclick=e=>e.stopPropagation();i.onchange=()=>{const r=S.res.byKey.get(i.dataset.oqty);if(i.value==='')return;setOrder(r.key,Math.max(0,Math.round(+i.value||0))*stepOf(r))}});
 }
-const itemCell=r=>`<td><div class="nm">${esc(r.it.name)}</div><div class="sub">${esc([r.it.size,r.it.pack,r.it.sku?'#'+r.it.sku:'',r.it.category].filter(Boolean).join(' · '))}</div></td>`;
+const itemCell=(r,meta)=>`<td><div class="nm">${esc(r.it.name)}</div><div class="sub">${esc([r.it.size,r.it.pack,r.it.sku?'#'+r.it.sku:'',r.it.category].filter(Boolean).join(' · '))}</div>${meta?`<div class="m-meta">${meta}</div>`:''}</td>`;
+// on a phone the other columns fold into this line under the name
+const mMeta=(...parts)=>parts.filter(Boolean).map(p=>`<span>${p}</span>`).join('');
 
 // one line adding up everything the table below is showing (follows search and filters)
 function renderTotals(rows,view){
@@ -1823,10 +1900,10 @@ function renderView(){
   let head,row;
   if(view==='dead'){
     head=`<tr>${th(view,'name','Item')}${th(view,'vendor','Distributor')}${th(view,'onHand','On hand',1)}${th(view,'last','Last sold',1)}${th(view,'wk','Sells / wk',1)}${th(view,'dos','Days of supply',1)}${th(view,'tied','Cash tied up',1)}<th>Notes</th></tr>`;
-    row=x=>`<tr data-key="${esc(x.key)}">${itemCell(x)}<td>${esc(x.it.vendor)}</td><td class="r">${int(x.onHand)}</td><td class="r">${x.lastSale!=null?fmtDayShort(x.lastSale)+'<div class="sub">'+int(x.daysSince)+' days ago</div>':'never'}</td><td class="r">${dec1(x.perWk)}</td><td class="r">${dosTxt(x.dos)}</td><td class="r">${money(x.tied)}</td><td>${chips(x)}</td></tr>`;
+    row=x=>`<tr data-key="${esc(x.key)}">${itemCell(x,mMeta(`${int(x.onHand)} on hand`,x.lastSale!=null?`last sold ${fmtDayShort(x.lastSale)}`:'never sold',`${dec1(x.perWk)}/wk`,esc(x.it.vendor)))}<td>${esc(x.it.vendor)}</td><td class="r">${int(x.onHand)}</td><td class="r">${x.lastSale!=null?fmtDayShort(x.lastSale)+'<div class="sub">'+int(x.daysSince)+' days ago</div>':'never'}</td><td class="r">${dec1(x.perWk)}</td><td class="r">${dosTxt(x.dos)}</td><td class="r key">${money(x.tied)}<div class="sub m-only">tied up</div></td><td class="c-notes">${chips(x,['spread'])}</td></tr>`;
   }else{
     head=`<tr>${th(view,'name','Item')}${th(view,'vendor','Distributor')}${th(view,'cls','Rank')}${th(view,'onHand','On hand',1)}${th(view,'wk','Sells / wk',1)}${th(view,'dos','Days left',1)}${th(view,'f30','Next 30d',1)}${th(view,'f60','60d',1)}${th(view,'f90','90d',1)}${th(view,'units','Suggested',1)}${th(view,'cost','Cost',1)}${view==='reorder'?th(view,'urg','Priority'):'<th>Notes</th>'}${th(view,'ord','Your order',1)}</tr>`;
-    row=x=>`<tr data-key="${esc(x.key)}">${itemCell(x)}<td>${esc(x.it.vendor)}</td><td><span class="abc ${x.cls}" title="${x.cls} item">${x.cls}</span></td><td class="r">${int(x.onHand)}${x.onOrder?`<div class="sub">+${int(x.onOrder)} on order</div>`:''}</td><td class="r">${dec1(x.perWk)}</td><td class="r">${dosTxt(x.dos)}</td><td class="r">${int(x.f30)}</td><td class="r">${int(x.f60)}</td><td class="r">${int(x.f90)}</td>${orderCell(x)}<td class="r">${x.units?money(x.cost):''}</td><td>${chips(x,['onorder'])}</td>${actionCell(x)}</tr>`;
+    row=x=>`<tr data-key="${esc(x.key)}">${itemCell(x,mMeta(`${int(x.onHand)} on hand`,`${dec1(x.perWk)}/wk`,isFinite(x.dos)?`${dosTxt(x.dos)} days left`:'',x.units?money(x.cost):'',esc(x.it.vendor)))}<td>${esc(x.it.vendor)}</td><td><span class="abc ${x.cls}" title="${x.cls} item">${x.cls}</span></td><td class="r">${int(x.onHand)}${x.onOrder?`<div class="sub">+${int(x.onOrder)} on order</div>`:''}</td><td class="r">${dec1(x.perWk)}</td><td class="r">${dosTxt(x.dos)}</td><td class="r">${int(x.f30)}</td><td class="r">${int(x.f60)}</td><td class="r">${int(x.f90)}</td>${orderCell(x)}<td class="r">${x.units?money(x.cost):''}</td><td class="c-notes">${chips(x,['onorder','spread'])}</td>${actionCell(x)}</tr>`;
   }
   const emptyMsg=view==='reorder'?'Nothing needs ordering with the current filters.':view==='dead'?'No dead or overstocked items with the current filters.':'No items match.';
   const cols=view==='dead'?8:13;
@@ -1837,7 +1914,7 @@ function renderView(){
   const gridKey=JSON.stringify([view,S.q,S.vendor,S.cat,S.flag,S.sort[view]]),oldBox=$('.tablewrap.grid',el);
   const keep=oldBox&&gridKey===lastGridKey?[oldBox.scrollTop,oldBox.scrollLeft]:null;lastGridKey=gridKey;
   if(oldBox)oldBox.onscroll=null;   // a box being replaced reports a last scroll at height 0
-  el.innerHTML=`<div class="tablewrap grid"><table class="items"><thead>${head}</thead><tbody>${groupHtml}${restHead}${shown.map(row).join('')}</tbody></table>${list.length||qdGroups.length?'':`<div class="empty">${emptyMsg}</div>`}${list.length>S.limit?`<div class="more"><button class="btn" id="btnMore" type="button">Show ${int(Math.min(200,list.length-S.limit))} more of ${int(list.length-S.limit)}</button></div>`:''}</div>${nSup?`<div class="supp-note">${int(nSup)} item${nSup===1?' is':'s are'} suppressed and won’t be suggested. <button class="btn ghost small" id="btnViewSup" type="button">View suppressed</button></div>`:''}`;
+  el.innerHTML=`<div class="tablewrap grid"><table class="items list"><thead>${head}</thead><tbody>${groupHtml}${restHead}${shown.map(row).join('')}</tbody></table>${list.length||qdGroups.length?'':`<div class="empty">${emptyMsg}</div>`}${list.length>S.limit?`<div class="more"><button class="btn" id="btnMore" type="button">Show ${int(Math.min(200,list.length-S.limit))} more of ${int(list.length-S.limit)}</button></div>`:''}</div>${nSup?`<div class="supp-note">${int(nSup)} item${nSup===1?' is':'s are'} suppressed and won’t be suggested. <button class="btn ghost small" id="btnViewSup" type="button">View suppressed</button></div>`:''}`;
   const vs=$('#btnViewSup');if(vs)vs.onclick=()=>goTab('all','hold');
   bindOrderButtons(el);
   $$('th[data-sort]',el).forEach(h=>h.onclick=()=>{const k=h.dataset.sort;const cur=S.sort[view];S.sort[view]=[k,cur[0]===k?-cur[1]:(['name','vendor','cls','dos','urg','last'].includes(k)?1:-1)];renderView()});
@@ -1913,9 +1990,9 @@ function qdParts(rows){
   return {parts,rest};
 }
 function sheetBody(rows){
-  const line=x=>{const st=stepOf(x);return `<tr data-key="${esc(x.key)}">${itemCell(x)}<td class="mono sub">${esc(x.it.upc||'')}</td><td class="r">${int(x.onHand)}</td><td class="r sub">${x.units?qtyShort(x,x.units):'—'}</td>
-    <td class="r"><div class="stepper"><button type="button" data-ostep="-1" data-k="${esc(x.key)}" aria-label="One less ${x.byCase?'case':'unit'} of ${esc(x.it.name)}">−</button><input type="number" min="0" step="1" inputmode="numeric" data-oqty="${esc(x.key)}" value="${x.ord/st}" aria-label="${x.byCase?'Cases':'Units'} of ${esc(quickLabel(x))}"><button type="button" data-ostep="1" data-k="${esc(x.key)}" aria-label="One more ${x.byCase?'case':'unit'} of ${esc(x.it.name)}">+</button></div><div class="sub">${x.byCase?`cs of ${x.pack} = ${int(x.ord)}`:'units'}</div></td>
-    <td class="r">${money2(x.it.cost)}</td><td class="r">${money2(x.ordCost)}</td><td class="r"><button class="x rm" type="button" data-unadd="${esc(x.key)}" aria-label="Take ${esc(x.it.name)} off your order" title="Take off your order">×</button></td></tr>`};
+  const line=x=>{const st=stepOf(x);return `<tr data-key="${esc(x.key)}">${itemCell(x,mMeta(x.it.upc?'UPC '+esc(x.it.upc):'',`${int(x.onHand)} on hand`,x.units?`suggested ${qtyShort(x,x.units)}`:'',`${money2(x.it.cost)} each`))}<td class="mono sub">${esc(x.it.upc||'')}</td><td class="r">${int(x.onHand)}</td><td class="r sub">${x.units?qtyShort(x,x.units):'—'}</td>
+    <td class="r key"><div class="stepper"><button type="button" data-ostep="-1" data-k="${esc(x.key)}" aria-label="One less ${x.byCase?'case':'unit'} of ${esc(x.it.name)}">${ic('minus')}</button><input type="number" min="0" step="1" inputmode="numeric" data-oqty="${esc(x.key)}" value="${x.ord/st}" aria-label="${x.byCase?'Cases':'Units'} of ${esc(quickLabel(x))}"><button type="button" data-ostep="1" data-k="${esc(x.key)}" aria-label="One more ${x.byCase?'case':'unit'} of ${esc(x.it.name)}">${ic('plus')}</button></div><div class="sub">${x.byCase?`cs of ${x.pack} = ${int(x.ord)}`:'units'}</div></td>
+    <td class="r">${money2(x.it.cost)}</td><td class="r c-total">${money2(x.ordCost)}</td><td class="r c-rm"><button class="x rm" type="button" data-unadd="${esc(x.key)}" aria-label="Take ${esc(x.it.name)} off your order" title="Take off your order">${ic('x')}</button></td></tr>`};
   const {parts,rest}=qdParts(rows);
   return parts.map(p=>{const uw=p.o.countIn==='case'?'case':'bottle',n=p.rs.reduce((s,x)=>s+(p.o.countIn==='case'?x.ord/x.pack:x.ord),0);
     return `<tr class="qd-head"><td colspan="8"><b>${esc(p.o.name)}</b><span class="sub"> · ${countTxt(n,uw)}${+p.o.qty>0?` (QD ${countTxt(+p.o.qty,uw)})`:''}</span>${+p.o.qty>0&&n+1e-9<+p.o.qty?' <span class="chip warn">Short of the QD</span>':''}</td></tr>`+p.rs.map(line).join('')}).join('')
@@ -1932,7 +2009,7 @@ function renderSheets(el){
     const short=g.cfg.min>0&&g.total<g.cfg.min,noCost=g.rows.filter(x=>!x.it.cost).length,est=g.rows.filter(x=>x.byCase&&x.packSrc==='est').length;
     return `<section class="sheet"><div class="sheet-head"><div><h3>${esc(g.v)}</h3><div class="sheet-meta"><span>${g.rows.length} item${g.rows.length===1?'':'s'}</span><span>${money2(g.total)} at cost</span><span>Delivery in ${g.cfg.lead} day${g.cfg.lead==1?'':'s'}, ordering every ${g.cfg.cycle} days</span>${short?`<span class="chip warn">Below ${money(g.cfg.min)} minimum</span>`:''}${noCost?`<span class="chip">${noCost} without a cost</span>`:''}${est?`<span class="chip">${est} with estimated case size</span>`:''}</div>${g.v===NO_DIST?'<p class="hint" style="margin-top:4px">Open Settings and pick a distributor for each department to split this into real order sheets.</p>':''}</div>
       <div class="row"><button class="btn small" type="button" data-copy="${gi}">Copy</button><button class="btn small" type="button" data-dl="${gi}">Download CSV</button></div></div>
-      <div class="tablewrap"><table class="items"><thead><tr><th>Item</th><th>UPC</th><th class="r">On hand</th><th class="r">Suggested</th><th class="r">Order</th><th class="r">Unit cost</th><th class="r">Total</th><th></th></tr></thead><tbody>
+      <div class="tablewrap"><table class="items list"><thead><tr><th>Item</th><th>UPC</th><th class="r">On hand</th><th class="r">Suggested</th><th class="r">Order</th><th class="r">Unit cost</th><th class="r">Total</th><th></th></tr></thead><tbody>
       ${sheetBody(g.rows)}
       </tbody></table></div></section>`;
   }).join('')+'</div>';
@@ -1990,8 +2067,8 @@ function renderQuickShell(){
       <div class="field"><label for="qqQty">QD quantity</label><input id="qqQty" type="number" min="1" step="1" inputmode="numeric" value="${esc(q.qty)}" placeholder="e.g. 10"></div>
       <div class="field"><label for="qqUnit">Counted in</label><select id="qqUnit"><option value="case"${q.countIn==='case'?' selected':''}>Cases</option><option value="unit"${q.countIn==='unit'?' selected':''}>Bottles</option></select></div>
       <div class="qf-checks">
-        <div class="mixctl"><label class="check"><input id="qqSizes" type="checkbox"${q.mixSizes?' checked':''}> <span id="qqSizesL">Sizes mix</span></label><button class="caret" id="qqSizesDD" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Pick which sizes mix">▾</button><div class="mixpop" id="qqSizesPop" hidden></div></div>
-        <div class="mixctl"><label class="check"><input id="qqFlav" type="checkbox"${q.mixFlavors?' checked':''}> <span id="qqFlavL">Flavours mix</span></label><button class="caret" id="qqFlavDD" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Pick which flavours mix">▾</button><div class="mixpop" id="qqFlavPop" hidden></div></div>
+        <div class="mixctl"><label class="check"><input id="qqSizes" type="checkbox"${q.mixSizes?' checked':''}> <span id="qqSizesL">Sizes mix</span></label><button class="caret" id="qqSizesDD" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Pick which sizes mix">${ic('down',12)}</button><div class="mixpop" id="qqSizesPop" hidden></div></div>
+        <div class="mixctl"><label class="check"><input id="qqFlav" type="checkbox"${q.mixFlavors?' checked':''}> <span id="qqFlavL">Flavours mix</span></label><button class="caret" id="qqFlavDD" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Pick which flavours mix">${ic('down',12)}</button><div class="mixpop" id="qqFlavPop" hidden></div></div>
       </div>
       <div class="field"><label for="qqDisc" id="qqDiscL">Discount per ${q.countIn==='case'?'case':'bottle'} (optional)</label><input id="qqDisc" type="number" min="0" step="0.01" value="${esc(q.disc)}" placeholder="$"></div>
     </div>
@@ -2053,11 +2130,14 @@ function syncMixCtl(){
   set('qqSizes',q.mixSizes,q.sizeSel,o.sizes,'Sizes');
   set('qqFlav',q.mixFlavors,q.flavSel,o.flavs.map(x=>({...x,mine:false})),'Flavours');
 }
-function closeMixPops(){for(const id of ['qqSizesPop','qqFlavPop']){const p=$('#'+id);if(p){p.hidden=true;const b=$('#'+id.replace('Pop','DD'));if(b)b.setAttribute('aria-expanded','false')}}}
+// on a phone the open menu is a bottom sheet over a backdrop
+const syncPopScrim=()=>document.body.classList.toggle('pop-open',!!document.querySelector('.mixpop:not([hidden])'));
+function closeMixPops(){for(const id of ['qqSizesPop','qqFlavPop']){const p=$('#'+id);if(p){p.hidden=true;const b=$('#'+id.replace('Pop','DD'));if(b)b.setAttribute('aria-expanded','false')}}syncPopScrim()}
 function toggleMixPop(which){
   const id=which==='sizes'?'qqSizesPop':'qqFlavPop',p=$('#'+id),open=p.hidden;
   closeMixPops();
   if(open){p.hidden=false;$('#'+id.replace('Pop','DD')).setAttribute('aria-expanded','true');renderMixPops()}
+  syncPopScrim();
 }
 function renderMixPops(){
   const q=S.quick,o=mixOptions(q);
@@ -2139,11 +2219,11 @@ function renderQuickOut(){
   const anyManual=Object.keys(q.manual).length>0,onOrder=qdList().length;
   const body=m.rows.map((x,i)=>{
     const r=x.r,u=m.units[i],st=stepOf(r),added=q.extra.includes(r.key)&&!m.auto.includes(r.key),rv=q.review[r.key],why=q.why[r.key];
-    return `<tr data-qk="${esc(r.key)}" title="Click for details"${rv?' class="needs-review"':''}><td><div class="nm">${esc(r.it.name)}${added?` <span class="chip acc">added</span> <button class="x" type="button" data-qrm="${esc(r.key)}" aria-label="Remove ${esc(r.it.name)}">×</button>`:''}</div><div class="sub">${esc([r.it.size,r.it.pack,r.it.sku?'#'+r.it.sku:'',r.it.category].filter(Boolean).join(' · '))}</div>${rv?`<div class="why" data-why="${esc(r.key)}"><span>${esc(rv)}</span> <button class="btn small" type="button" data-ok="${esc(r.key)}">Looks right</button></div>`:why?`<div class="why ok">${esc(why)}</div>`:''}</td><td class="r" title="${esc(rateBasis(r))}">${dec1(r.perWk)}${r.oosWk.length?`<div class="sub">${r.oosWk.length} out-of-stock wk${r.oosWk.length===1?'':'s'} skipped</div>`:''}</td><td class="r">${int(r.onHand)}</td><td class="r">${qtyTxt(r,x.normal)}</td>
-      <td class="r"><div class="stepper${x.locked?' set':''}"><button type="button" data-step="-1" data-k="${esc(r.key)}" aria-label="One less ${r.byCase?'case':'unit'} of ${esc(r.it.name)}">−</button><input type="number" min="0" step="1" inputmode="numeric" data-qv="${esc(r.key)}" value="${u/st}" aria-label="${r.byCase?'Cases':'Units'} of ${esc(quickLabel(r))}"><button type="button" data-step="1" data-k="${esc(r.key)}" aria-label="One more ${r.byCase?'case':'unit'} of ${esc(r.it.name)}">+</button></div><div class="sub" data-qu="${esc(r.key)}">${r.byCase?`cs of ${r.pack} = ${int(u)}`:'units'}</div></td>
-      <td class="r" data-qd="${esc(r.key)}">${daysTxt(x,u)}</td></tr>`;
+    return `<tr data-qk="${esc(r.key)}" title="Click for details"${rv?' class="needs-review"':''}><td><div class="nm">${esc(r.it.name)}${added?` <span class="chip acc">added</span> <button class="x" type="button" data-qrm="${esc(r.key)}" aria-label="Remove ${esc(r.it.name)}">${ic('x')}</button>`:''}</div><div class="sub">${esc([r.it.size,r.it.pack,r.it.sku?'#'+r.it.sku:'',r.it.category].filter(Boolean).join(' · '))}</div><div class="m-meta">${mMeta(`${dec1(r.perWk)}/wk`,`${int(r.onHand)} on hand`,x.normal?`normally ${qtyShort(r,x.normal)}`:'')}</div>${rv?`<div class="why" data-why="${esc(r.key)}"><span>${esc(rv)}</span> <button class="btn small" type="button" data-ok="${esc(r.key)}">Looks right</button></div>`:why?`<div class="why ok">${esc(why)}</div>`:''}</td><td class="r" title="${esc(rateBasis(r))}">${dec1(r.perWk)}${r.oosWk.length?`<div class="sub">${r.oosWk.length} out-of-stock wk${r.oosWk.length===1?'':'s'} skipped</div>`:''}</td><td class="r">${int(r.onHand)}</td><td class="r">${qtyTxt(r,x.normal)}</td>
+      <td class="r key"><div class="stepper${x.locked?' set':''}"><button type="button" data-step="-1" data-k="${esc(r.key)}" aria-label="One less ${r.byCase?'case':'unit'} of ${esc(r.it.name)}">${ic('minus')}</button><input type="number" min="0" step="1" inputmode="numeric" data-qv="${esc(r.key)}" value="${u/st}" aria-label="${r.byCase?'Cases':'Units'} of ${esc(quickLabel(r))}"><button type="button" data-step="1" data-k="${esc(r.key)}" aria-label="One more ${r.byCase?'case':'unit'} of ${esc(r.it.name)}">${ic('plus')}</button></div><div class="sub" data-qu="${esc(r.key)}">${r.byCase?`cs of ${r.pack} = ${int(u)}`:'units'}</div></td>
+      <td class="r c-days" data-qd="${esc(r.key)}">${daysTxt(x,u)}</td></tr>`;
   }).join('');
-  el.innerHTML=`<div id="qqSum">${quickSummary(m)}</div><div id="qqNote">${suggestNote()}</div><div class="tablewrap" style="border:0;border-top:1px solid var(--line);border-radius:0"><table class="items plain"><thead><tr><th>Item</th><th class="r">Sells / wk</th><th class="r">On hand</th><th class="r">Normal order</th><th class="r">Order</th><th class="r">Days of supply after</th></tr></thead><tbody>${body}</tbody></table></div>
+  el.innerHTML=`<div id="qqSum">${quickSummary(m)}</div><div id="qqNote">${suggestNote()}</div><div class="tablewrap" style="box-shadow:none;border-top:1px solid var(--line);border-radius:0"><table class="items plain list"><thead><tr><th>Item</th><th class="r">Sells / wk</th><th class="r">On hand</th><th class="r">Normal order</th><th class="r">Order</th><th class="r">Days of supply after</th></tr></thead><tbody>${body}</tbody></table></div>
     <div class="qf-add"><div class="field"><label for="qqAdd">Add another item to this QD</label><input id="qqAdd" type="search" autocomplete="off" placeholder="e.g. Bacardi Gold 375"></div><div class="results" id="qqAddRes" hidden></div></div>
     <div class="qq-bar"><div><b id="qqTot">${totalTxt(m)}</b><div class="hint">Change any quantity with − and +; the others adjust to keep the QD total. <button class="btn ghost small" id="qqReset" type="button"${anyManual?'':' hidden'}>Reset to suggestion</button></div></div>
       <div class="row"><button class="btn small ghost" id="qqSave" type="button">Save as a deal…</button>${q.busy?'<button class="btn" id="qqStop" type="button">Stop</button>':''}<button class="btn" id="qqSuggest" type="button"${q.busy?' disabled':''}>${q.busy?'Suggesting…':'Suggest order'}</button><button class="btn primary" id="qqOrder" type="button">Add to order</button></div></div>
@@ -2403,7 +2483,7 @@ function openDealEditor(init){
           <div class="field"><label for="tm${i}">Buy at least (${unitWord(draft)}s)</label><input id="tm${i}" data-t="${i}" data-tf="min" type="number" min="0" step="1" value="${t.min}"></div>
           <div class="field"><label for="ta${i}">Discount</label><input id="ta${i}" data-t="${i}" data-tf="amt" type="number" min="0" step="0.01" value="${t.amt}"></div>
           <div class="field"><label for="tt${i}">Applies</label><select id="tt${i}" data-t="${i}" data-tf="type"><option value="case"${t.type==='case'?' selected':''}>$ off per case</option><option value="unit"${t.type==='unit'?' selected':''}>$ off per bottle</option><option value="pct"${t.type==='pct'?' selected':''}>% off cost</option></select></div>
-          <button class="x" type="button" data-trm="${i}" aria-label="Remove tier">×</button></div>`).join('')}</div>
+          <button class="x" type="button" data-trm="${i}" aria-label="Remove tier">${ic('x')}</button></div>`).join('')}</div>
         <button class="btn small" id="dqAddTier" type="button" style="margin-top:8px">Add tier</button>
       </div>
       <div class="settings-grid">
@@ -2537,7 +2617,7 @@ function openDetail(key){
       <div class="fact"><div class="k">On-hand value</div><div class="v">${it.cost>0?money2(Math.max(0,r.onHand)*it.cost):'—'}</div></div>
     </div>
     ${it.cost>0?(it.costSrc==='purch'?`<p class="hint">The Item List has no cost for this item, so the cost is the average you paid ${esc(it.buys[0].vendor)}.</p>`:''):'<p class="hint">No cost for this item in the Item List file, so order totals leave it out. Add the cost in Advent and export the list again.</p>'}
-    ${it.buys?`<div><div class="label" style="margin-bottom:6px">Bought from</div><div class="tablewrap"><table class="items plain buys"><thead><tr><th>Distributor</th><th class="r">Units received</th><th class="r">Avg price paid</th><th class="r">Total</th></tr></thead><tbody>${(()=>{const best=Math.min(...it.buys.filter(b=>b.avg>0).map(b=>b.avg));return it.buys.map(b=>`<tr><td>${esc(b.vendor)}${b.vendor===it.vendor?' <span class="chip acc">ordering from</span>':''}${it.buys.length>1&&b.avg>0&&b.avg===best?' <span class="chip ok">lowest price</span>':''}</td><td class="r">${int(b.qty)}</td><td class="r">${b.avg>0?money2(b.avg):'—'}</td><td class="r">${b.total>0?money2(b.total):'—'}</td></tr>`).join('')})()}</tbody></table></div>
+    ${it.buys?`<div><div class="label" style="margin-bottom:6px">Bought from</div><div class="tablewrap"><table class="items plain buys"><thead><tr><th>Distributor</th><th class="r">Units received</th><th class="r">Avg price paid</th><th class="r">Total</th></tr></thead><tbody>${(()=>{const best=Math.min(...it.buys.filter(b=>b.avg>0).map(b=>b.avg));return it.buys.map(b=>`<tr><td>${esc(b.vendor)}${b.vendor===it.vendor?' <span class="chip acc">ordering from</span>':''}${it.buys.length>1&&b.avg>0&&b.avg===best?' <span class="chip ok">lowest price</span>':''}</td><td class="r">${int(b.qty)}</td><td class="r">${b.avg>0?money2(b.avg):'—'}${b.total>0?`<div class="sub m-only">${money2(b.total)} in all</div>`:''}</td><td class="r">${b.total>0?money2(b.total):'—'}</td></tr>`).join('')})()}</tbody></table></div>
       <p class="hint" style="margin-top:6px">From the Item Purchase By Vendor report.${it.vsrc==='purch'?' The distributor you bought the most from is used for orders; change it below.':''}${it.cost>0&&it.buys[0].avg>0&&it.costSrc!=='purch'&&Math.abs(it.buys[0].avg-it.cost)/it.cost>.1?` The average you paid (${money2(it.buys[0].avg)}) differs from the last cost by ${Math.round(Math.abs(it.buys[0].avg-it.cost)/it.cost*100)}%.`:''}</p></div>`:''}
     <div class="row order-row">${r.ord>0?`<span class="on-order">✓ ${qtyShort(r,r.ord)} on your order${r.qdId?' (in a QD)':''}</span><button class="btn small ghost" id="dOff" type="button">Take off the order</button>`:r.held?'<span class="hint">Suppressed: won’t be suggested. Untick “Suppress” below to bring it back.</span>':`<button class="btn primary" id="dAdd" type="button">Add ${qtyShort(r,r.units>0?r.units:stepOf(r))} to your order</button>${r.units>0?'<span class="hint">the suggested amount; change it on the order sheet</span>':''}`}</div>
     <div><div class="legend"><span><i class="sw" style="background:var(--bar)"></i>Sold per week</span><span><i class="sw" style="background:var(--bar-fore)"></i>Forecast</span><span><i class="sw" style="background:repeating-linear-gradient(45deg,var(--crit) 0 1.5px,var(--crit-soft) 1.5px 4px)"></i>Out of stock, ignored</span></div>
@@ -2764,7 +2844,7 @@ $('#btnSettings').onclick=openSettings;
 $('#syncStatus').onclick=showSyncError;
 $('#filesToggle').onclick=()=>{store.set('filesOpen',!filesOpen());renderFilesPanel()};
 $('#q').oninput=e=>{S.q=e.target.value;S.limit=200;renderView()};
-$('#btnExport').onclick=e=>{e.stopPropagation();const p=$('#exportPop'),open=p.hidden;closeMsel();if(open){renderExportPop();p.hidden=false;$('#btnExport').setAttribute('aria-expanded','true');$('[data-exp]',p).focus()}};
+$('#btnExport').onclick=e=>{e.stopPropagation();const p=$('#exportPop'),open=p.hidden;closeMsel();if(open){renderExportPop();p.hidden=false;$('#btnExport').setAttribute('aria-expanded','true');$('[data-exp]',p).focus()}syncPopScrim()};
 $('#fReset').onclick=()=>{S.vendor=[];S.cat=[];S.flag=[];S.limit=200;closeMsel();renderFilters();renderView()};
 let clearArmed=false;
 $('#btnClear').onclick=()=>{
