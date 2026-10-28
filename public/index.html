@@ -220,6 +220,25 @@ td.order b{font-weight:600;font-size:14px;font-variant-numeric:tabular-nums}
 .chip.warn{background:var(--warn-soft);color:var(--warn)}
 .chip.acc{background:var(--accent-soft);color:var(--accent)}
 .chip.ok{background:var(--ok-soft);color:var(--ok)}
+.cellsel{display:flex;gap:10px;align-items:flex-start}.cellbody{min-width:0}
+.selbox{position:relative;isolation:isolate;display:inline-grid;place-items:center;flex:none;width:18px;height:20px;cursor:pointer}
+.selbox::after{content:"";position:absolute;inset:-10px -8px;z-index:-1}
+.selbox.head::after{inset:-6px -8px}
+.selbox input{width:16px;height:16px;margin:0;cursor:pointer}
+.selbox.head{vertical-align:-4px;margin-right:10px}
+/* a selected row stays green under the pointer too (beats the hover tint on the pinned first column) */
+table.items tbody tr.is-sel td,.tablewrap.grid tbody tr.is-sel:not(.qd-head) td:first-child{background:var(--accent-soft)!important}
+.bulkbar{position:fixed;left:50%;bottom:max(16px,calc(env(safe-area-inset-bottom,0px) + 10px));transform:translateX(-50%);z-index:25;display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;max-width:calc(100vw - 24px);padding:8px 10px 8px 16px;background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow)}
+.bb-n{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.bb-acts{display:flex;gap:6px;flex-wrap:wrap}
+.bulkbar .bb-pop{top:auto;bottom:calc(100% + 8px);left:0;min-width:300px}
+.bb-list{display:flex;flex-direction:column;gap:2px;max-height:240px;overflow:auto}
+.bb-opt{display:flex;justify-content:space-between;align-items:center;gap:10px;border:0;background:none;text-align:left;padding:8px 6px;border-radius:var(--r-sm);cursor:pointer;font:inherit;font-size:13px;color:var(--ink)}
+.bb-opt:disabled{color:var(--muted);cursor:default}
+@media (hover:hover){.bb-opt:not(:disabled):hover{background:var(--sunk)}}
+body.has-bulk .wrap{padding-bottom:110px}
+body.pop-open .bulkbar{z-index:32}
+@media (prefers-reduced-motion:no-preference){.bulkbar:not([hidden]){animation:barIn .2s var(--ease-out)}@keyframes barIn{from{opacity:0;transform:translate(-50%,8px)}}}
 .chip.tag{gap:4px;background:var(--surface);color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line)}
 .chip.tag .x{padding:0;margin-left:1px;display:inline-grid;place-items:center}
 .chip.tag.pick{border:0;cursor:pointer;font:inherit;font-size:11.5px;font-weight:500;padding:3px 9px}
@@ -428,6 +447,10 @@ textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12
   .m-meta span{white-space:nowrap}
   .m-only{display:block}
   .act-btns{flex-direction:row;align-items:center;gap:6px}
+  .bulkbar{left:12px;right:12px;transform:none;max-width:none;padding:10px 12px;gap:8px}
+  .bulkbar .bb-pop{top:auto;bottom:0;left:0;right:0;min-width:0}
+  .bb-acts{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;width:100%}.bb-acts::-webkit-scrollbar{display:none}.bb-acts .btn{flex:none;min-height:40px}
+  .selbox{width:22px;height:24px}.selbox input{width:20px;height:20px}
   .btn.add{min-height:40px}
   .x.rm{display:inline-grid;place-items:center;min-width:40px;min-height:40px}
   .buys th:nth-child(4),.buys td:nth-child(4){display:none}
@@ -444,6 +467,7 @@ textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12
   body.pop-open .pop-scrim{display:block;position:fixed;inset:0;background:var(--scrim);z-index:30}
 }
 @media (max-width:640px) and (prefers-reduced-motion:no-preference){
+  .bulkbar:not([hidden]){animation:barInM .2s var(--ease-out)}@keyframes barInM{from{opacity:0;transform:translateY(8px)}}
   .mixpop:not(.msel-pop),.msel-pop.enter{animation:sheet .24s var(--ease-out)}@keyframes sheet{from{transform:translateY(24px);opacity:0}}
 }
 @media (prefers-reduced-motion:no-preference){
@@ -534,6 +558,18 @@ textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12
   <div id="view"></div>
 </div>
 
+<div class="bulkbar" id="bulkBar" role="region" aria-label="Selected items" hidden>
+  <span class="bb-n" id="bulkN" aria-live="polite"></span>
+  <div class="bb-acts">
+    <button class="btn small" type="button" data-bulk="tag">Add tag</button>
+    <button class="btn small" type="button" data-bulk="untag">Remove tag</button>
+    <button class="btn small" type="button" data-bulk="order">Add to order</button>
+    <button class="btn small" type="button" data-bulk="hold">Suppress</button>
+    <button class="btn small" type="button" data-bulk="unhold">Unsuppress</button>
+    <button class="btn small ghost" type="button" data-bulk="clear">Clear</button>
+  </div>
+  <div class="mixpop bb-pop" id="bulkPop" hidden></div>
+</div>
 <div id="overlay" hidden></div>
 <div class="pop-scrim" id="popScrim"></div>
 
@@ -837,7 +873,7 @@ function renameTag(from,to){
 }
 const tagChip=t=>`<span class="chip tag">${ic('tag',11)}${esc(t)}</span>`;
 
-const S={sample:true,inv:null,sales:[],purch:null,pending:[],res:null,view:'reorder',q:'',vendor:[],cat:[],flag:[],tag:[],limit:200,showAllFiles:false,
+const S={sample:true,inv:null,sales:[],purch:null,pending:[],res:null,view:'reorder',q:'',vendor:[],cat:[],flag:[],tag:[],sel:new Set(),limit:200,showAllFiles:false,
   quick:{anchor:'',qty:'',countIn:'case',mixSizes:false,mixFlavors:false,disc:'',extra:[],manual:{},review:{},why:{},note:'',busy:null},
   sort:{reorder:['urg',1],all:['name',1],dead:['tied',-1]}};
 
@@ -1838,7 +1874,7 @@ function renderKpis(){
 function goTab(v,flag=''){
   if(v!==S.view){
     resetQuick();
-    S.q='';S.vendor=[];S.cat=[];S.flag=[];S.tag=[];$('#q').value='';
+    S.q='';S.vendor=[];S.cat=[];S.flag=[];S.tag=[];S.sel.clear();$('#q').value='';
   }
   if(flag)S.flag=[flag];
   S.view=v;S.limit=200;renderTabs();renderFilters();renderView();
@@ -1897,6 +1933,68 @@ function renderMsel(id){
   syncPopScrim();
   $('#fReset').hidden=!Object.keys(FILTERS).some(k=>S[k].length);
 }
+/* ---------- bulk actions on ticked items ---------- */
+function renderBulkBar(){
+  const bar=$('#bulkBar');if(!bar)return;const n=S.sel.size;
+  bar.hidden=!n;document.body.classList.toggle('has-bulk',!!n);
+  if(!n){const p=$('#bulkPop');if(p&&!p.hidden){p.hidden=true;syncPopScrim()}return}
+  $('#bulkN').textContent=`${int(n)} selected`;
+  const rs=[...S.sel].map(k=>S.res.byKey.get(k)).filter(Boolean);
+  bar.querySelector('[data-bulk="untag"]').disabled=!rs.some(r=>tagsOf(r.key).length);
+  bar.querySelector('[data-bulk="unhold"]').hidden=!rs.some(r=>r.held);
+  bar.querySelector('[data-bulk="hold"]').hidden=rs.every(r=>r.held);
+}
+// change many items' adjustments at once and save them in one go
+function bulkOverride(keys,fn){
+  for(const k of keys){const o=Object.assign({},overrides[k]||{});fn(o,k);overrides[k]=o}
+  store.set('overrides',overrides);
+}
+function bulkTag(name,add){
+  const keys=[...S.sel];let n=0;
+  bulkOverride(keys,(o,k)=>{
+    const t=tagsOf(k),has=t.includes(name);
+    if(add&&!has){o.tags=[...t,name];n++}
+    if(!add&&has){const r=t.filter(x=>x!==name);if(r.length)o.tags=r;else delete o.tags;n++}
+  });
+  return n;
+}
+function openBulkPop(kind){
+  const pop=$('#bulkPop');
+  if(!pop.hidden&&pop.dataset.kind===kind){pop.hidden=true;syncPopScrim();return}
+  closeMsel();pop.dataset.kind=kind;
+  const sel=[...S.sel];
+  if(kind==='tag'){
+    const tl=allTags(),cnt=t=>sel.filter(k=>tagsOf(k).includes(t)).length;
+    pop.innerHTML=`<div class="mixpop-head"><b>Add a tag to ${int(sel.length)} item${sel.length===1?'':'s'}</b></div>
+      <form class="tag-add" id="bulkTagForm"><input id="bulkTagIn" list="bulkTagList" maxlength="40" autocomplete="off" placeholder="New or existing tag" aria-label="Tag to add"><datalist id="bulkTagList">${tl.map(t=>`<option value="${esc(t)}">`).join('')}</datalist><button class="btn small primary" type="submit">Add</button></form>
+      ${tl.length?`<div class="bb-list">${tl.map(t=>{const c=cnt(t);return `<button class="bb-opt" type="button" data-bt="${esc(t)}"${c===sel.length?' disabled':''}><span>${ic('tag',12)} ${esc(t)}</span><span class="sub">${c===sel.length?'all have it':c?`${int(c)} have it`:''}</span></button>`}).join('')}</div>`:''}`;
+    const go=name=>{const t=ensureTag(name);if(!t)return;const n=bulkTag(t,true);pop.hidden=true;syncPopScrim();renderFilters();renderView();toast(n?`Tagged ${int(n)} item${n===1?'':'s'} “${t}”`:`All ${int(sel.length)} already had “${t}”`)};
+    $('#bulkTagForm').onsubmit=e=>{e.preventDefault();go($('#bulkTagIn').value)};
+    $$('[data-bt]',pop).forEach(b=>b.onclick=()=>go(b.dataset.bt));
+  }else{
+    const tl=allTags().map(t=>[t,sel.filter(k=>tagsOf(k).includes(t)).length]).filter(x=>x[1]);
+    pop.innerHTML=`<div class="mixpop-head"><b>Remove a tag from the selected items</b></div><div class="bb-list">${tl.map(([t,c])=>`<button class="bb-opt" type="button" data-bt="${esc(t)}"><span>${ic('tag',12)} ${esc(t)}</span><span class="sub">on ${int(c)}</span></button>`).join('')}</div>`;
+    $$('[data-bt]',pop).forEach(b=>b.onclick=()=>{const t=b.dataset.bt,n=bulkTag(t,false);pop.hidden=true;syncPopScrim();renderFilters();renderView();toast(`Removed “${t}” from ${int(n)} item${n===1?'':'s'}`)});
+  }
+  pop.hidden=false;pop.onclick=e=>e.stopPropagation();syncPopScrim();
+  const f=$('#bulkTagIn');if(f&&matchMedia('(pointer:fine)').matches)f.focus();
+}
+function bulkAction(kind){
+  const sel=[...S.sel],rs=sel.map(k=>S.res.byKey.get(k)).filter(Boolean);
+  if(kind==='clear'){S.sel.clear();renderView();return}
+  if(kind==='tag'||kind==='untag'){openBulkPop(kind);return}
+  if(kind==='order'){
+    // each item's suggested amount, or one case/unit when nothing is suggested; items already on the order stay as they are
+    const add=rs.filter(r=>!r.ord&&!r.held);if(!add.length){toast('Those items are already on your order or suppressed');return}
+    const c=cartObj();for(const r of add)c[r.key]=r.units>0?r.units:stepOf(r);saveCart();refreshOrders();
+    const skipped=rs.length-add.length;
+    toast(`Added ${int(add.length)} item${add.length===1?'':'s'} to your order${skipped?` (${int(skipped)} already on it or suppressed)`:''}`);return;
+  }
+  if(kind==='hold'||kind==='unhold'){
+    const on=kind==='hold';bulkOverride(sel,o=>{o.noReorder=on});recompute();
+    toast(on?`Suppressed ${int(sel.length)} item${sel.length===1?'':'s'}. They won’t be suggested again.`:`${int(sel.length)} item${sel.length===1?' will':'s will'} be suggested again when needed`,{label:'Undo',fn:()=>{bulkOverride(sel,o=>{o.noReorder=!on});recompute()}});
+  }
+}
 function renderMselPop(id,q=''){
   const f=FILTERS[id],box=$('#'+f.el),pop=$('.msel-pop',box);
   const long=f.opts.length>8,ql=q.trim().toLowerCase();
@@ -1920,16 +2018,18 @@ function renderMselPop(id,q=''){
 function closeMsel(focus){
   const id=openMsel;openMsel='';
   if(id){renderMsel(id);if(focus)$('.msel-btn',$('#'+FILTERS[id].el)).focus()}
+  const bp=$('#bulkPop');if(bp&&!bp.hidden)bp.hidden=true;
   const ep=$('#exportPop');if(ep&&!ep.hidden){ep.hidden=true;$('#btnExport').setAttribute('aria-expanded','false');if(focus)$('#btnExport').focus()}
   syncPopScrim();
 }
 document.addEventListener('click',()=>closeMsel());
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&(openMsel||!$('#exportPop').hidden))closeMsel(true)});
 
-function th(view,k,label,right){
+function th(view,k,label,right,pre=''){
   const [sk,dir]=S.sort[view];
-  return `<th${k?` data-sort="${k}"`:''} class="${right?'r':''}" ${k?`aria-sort="${sk===k?(dir>0?'ascending':'descending'):'none'}"`:''}>${label}${sk===k?` <span class="arr">${ic(dir>0?'up':'down',12)}</span>`:''}</th>`;
+  return `<th${k?` data-sort="${k}"`:''} class="${right?'r':''}" ${k?`aria-sort="${sk===k?(dir>0?'ascending':'descending'):'none'}"`:''}>${pre}${label}${sk===k?` <span class="arr">${ic(dir>0?'up':'down',12)}</span>`:''}</th>`;
 }
+const SEL_ALL='<label class="selbox head" title="Select everything in this list"><input type="checkbox" id="selAll" aria-label="Select every item in this list"></label>';
 function orderCell(r){
   if(!r.units)return '<td class="r order"><span class="sub">—</span></td>';
   return r.byCase?`<td class="r order"><b>${r.cases} cs</b><div class="sub">${int(r.units)} units${r.packSrc==='est'?` · ${r.pack}/cs est.`:''}</div></td>`:`<td class="r order"><b>${int(r.units)}</b><div class="sub">units</div></td>`;
@@ -1955,7 +2055,10 @@ function bindOrderButtons(el){
   $$('[data-ostep]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const r=S.res.byKey.get(b.dataset.k);setOrder(r.key,r.ord+(+b.dataset.ostep)*stepOf(r))});
   $$('[data-oqty]',el).forEach(i=>{i.onclick=e=>e.stopPropagation();i.onchange=()=>{const r=S.res.byKey.get(i.dataset.oqty);if(i.value==='')return;setOrder(r.key,Math.max(0,Math.round(+i.value||0))*stepOf(r))}});
 }
-const itemCell=(r,meta)=>`<td><div class="nm">${esc(r.it.name)}</div><div class="sub">${esc([r.it.size,r.it.pack,r.it.sku?'#'+r.it.sku:'',r.it.category].filter(Boolean).join(' · '))}</div>${meta?`<div class="m-meta">${meta}</div>`:''}</td>`;
+const itemCell=(r,meta,sel)=>{
+  const body=`<div class="nm">${esc(r.it.name)}</div><div class="sub">${esc([r.it.size,r.it.pack,r.it.sku?'#'+r.it.sku:'',r.it.category].filter(Boolean).join(' · '))}</div>${meta?`<div class="m-meta">${meta}</div>`:''}`;
+  return sel?`<td><div class="cellsel"><label class="selbox"><input type="checkbox" data-sel="${esc(r.key)}"${S.sel.has(r.key)?' checked':''} aria-label="Select ${esc(quickLabel(r))}"></label><div class="cellbody">${body}</div></div></td>`:`<td>${body}</td>`;
+};
 // on a phone the other columns fold into this line under the name
 const mMeta=(...parts)=>parts.filter(Boolean).map(p=>`<span>${p}</span>`).join('');
 
@@ -1984,11 +2087,15 @@ function renderTotals(rows,view){
 function renderView(){
   const el=$('#view');const r=S.res;
   if(!r||S.view==='how'||S.view==='deals')renderTotals(null);
+  if(!['reorder','all','dead'].includes(S.view)){S.sel.clear();renderBulkBar()}
   if(S.view==='how'){el.innerHTML=howHtml();return}
   if(!r){el.innerHTML='<div class="tablewrap"><div class="empty">Load your inventory list to see reorder suggestions.</div></div>';return}
   if(S.view==='sheets'){renderTotals(filtered().filter(x=>x.ord>0).map(x=>({...x,units:x.ord,cases:x.ordCases,cost:x.ordCost})),'sheets');renderSheets(el);return}
   if(S.view==='deals'){renderDeals(el);return}
   const view=S.view;let list=viewRows(view);
+  // the selection only ever holds items this list shows, so an action never touches hidden items
+  {const inList=new Set(list.map(x=>x.key));for(const k of [...S.sel])if(!inList.has(k))S.sel.delete(k);}
+  const listKeys=list.map(x=>x.key);
   renderTotals(list,view);
   // on the Reorder list each QD added from the quick check sits together under its own heading
   const qdGroups=[];
@@ -2005,11 +2112,11 @@ function renderView(){
   const shown=list.slice(0,S.limit);
   let head,row;
   if(view==='dead'){
-    head=`<tr>${th(view,'name','Item')}${th(view,'vendor','Distributor')}${th(view,'onHand','On hand',1)}${th(view,'last','Last sold',1)}${th(view,'wk','Sells / wk',1)}${th(view,'dos','Days of supply',1)}${th(view,'tied','Cash tied up',1)}<th>Notes</th></tr>`;
-    row=x=>`<tr data-key="${esc(x.key)}">${itemCell(x,mMeta(`${int(x.onHand)} on hand`,x.lastSale!=null?`last sold ${fmtDayShort(x.lastSale)}`:'never sold',`${dec1(x.perWk)}/wk`,esc(x.it.vendor)))}<td>${esc(x.it.vendor)}</td><td class="r">${int(x.onHand)}</td><td class="r">${x.lastSale!=null?fmtDayShort(x.lastSale)+'<div class="sub">'+int(x.daysSince)+' days ago</div>':'never'}</td><td class="r">${dec1(x.perWk)}</td><td class="r">${dosTxt(x.dos)}</td><td class="r key">${money(x.tied)}<div class="sub m-only">tied up</div></td><td class="c-notes">${chips(x,['spread'])}</td></tr>`;
+    head=`<tr>${th(view,'name','Item',0,SEL_ALL)}${th(view,'vendor','Distributor')}${th(view,'onHand','On hand',1)}${th(view,'last','Last sold',1)}${th(view,'wk','Sells / wk',1)}${th(view,'dos','Days of supply',1)}${th(view,'tied','Cash tied up',1)}<th>Notes</th></tr>`;
+    row=x=>`<tr data-key="${esc(x.key)}"${S.sel.has(x.key)?' class="is-sel"':''}>${itemCell(x,mMeta(`${int(x.onHand)} on hand`,x.lastSale!=null?`last sold ${fmtDayShort(x.lastSale)}`:'never sold',`${dec1(x.perWk)}/wk`,esc(x.it.vendor)),true)}<td>${esc(x.it.vendor)}</td><td class="r">${int(x.onHand)}</td><td class="r">${x.lastSale!=null?fmtDayShort(x.lastSale)+'<div class="sub">'+int(x.daysSince)+' days ago</div>':'never'}</td><td class="r">${dec1(x.perWk)}</td><td class="r">${dosTxt(x.dos)}</td><td class="r key">${money(x.tied)}<div class="sub m-only">tied up</div></td><td class="c-notes">${chips(x,['spread'])}</td></tr>`;
   }else{
-    head=`<tr>${th(view,'name','Item')}${th(view,'vendor','Distributor')}${th(view,'cls','Rank')}${th(view,'onHand','On hand',1)}${th(view,'wk','Sells / wk',1)}${th(view,'dos','Days left',1)}${th(view,'f30','Next 30d',1)}${th(view,'f60','60d',1)}${th(view,'f90','90d',1)}${th(view,'units','Suggested',1)}${th(view,'cost','Cost',1)}${view==='reorder'?th(view,'urg','Priority'):'<th>Notes</th>'}${th(view,'ord','Your order',1)}</tr>`;
-    row=x=>`<tr data-key="${esc(x.key)}">${itemCell(x,mMeta(`${int(x.onHand)} on hand`,`${dec1(x.perWk)}/wk`,isFinite(x.dos)?`${dosTxt(x.dos)} days left`:'',x.units?money(x.cost):'',esc(x.it.vendor)))}<td>${esc(x.it.vendor)}</td><td><span class="abc ${x.cls}" title="${x.cls} item">${x.cls}</span></td><td class="r">${int(x.onHand)}${x.onOrder?`<div class="sub">+${int(x.onOrder)} on order</div>`:''}</td><td class="r">${dec1(x.perWk)}</td><td class="r">${dosTxt(x.dos)}</td><td class="r">${int(x.f30)}</td><td class="r">${int(x.f60)}</td><td class="r">${int(x.f90)}</td>${orderCell(x)}<td class="r">${x.units?money(x.cost):''}</td><td class="c-notes">${chips(x,['onorder','spread'])}</td>${actionCell(x)}</tr>`;
+    head=`<tr>${th(view,'name','Item',0,SEL_ALL)}${th(view,'vendor','Distributor')}${th(view,'cls','Rank')}${th(view,'onHand','On hand',1)}${th(view,'wk','Sells / wk',1)}${th(view,'dos','Days left',1)}${th(view,'f30','Next 30d',1)}${th(view,'f60','60d',1)}${th(view,'f90','90d',1)}${th(view,'units','Suggested',1)}${th(view,'cost','Cost',1)}${view==='reorder'?th(view,'urg','Priority'):'<th>Notes</th>'}${th(view,'ord','Your order',1)}</tr>`;
+    row=x=>`<tr data-key="${esc(x.key)}"${S.sel.has(x.key)?' class="is-sel"':''}>${itemCell(x,mMeta(`${int(x.onHand)} on hand`,`${dec1(x.perWk)}/wk`,isFinite(x.dos)?`${dosTxt(x.dos)} days left`:'',x.units?money(x.cost):'',esc(x.it.vendor)),true)}<td>${esc(x.it.vendor)}</td><td><span class="abc ${x.cls}" title="${x.cls} item">${x.cls}</span></td><td class="r">${int(x.onHand)}${x.onOrder?`<div class="sub">+${int(x.onOrder)} on order</div>`:''}</td><td class="r">${dec1(x.perWk)}</td><td class="r">${dosTxt(x.dos)}</td><td class="r">${int(x.f30)}</td><td class="r">${int(x.f60)}</td><td class="r">${int(x.f90)}</td>${orderCell(x)}<td class="r">${x.units?money(x.cost):''}</td><td class="c-notes">${chips(x,['onorder','spread'])}</td>${actionCell(x)}</tr>`;
   }
   const emptyMsg=view==='reorder'?'Nothing needs ordering with the current filters.':view==='dead'?'No dead or overstocked items with the current filters.':'No items match.';
   const cols=view==='dead'?8:13;
@@ -2024,7 +2131,13 @@ function renderView(){
   const vs=$('#btnViewSup');if(vs)vs.onclick=()=>goTab('all','hold');
   bindOrderButtons(el);
   $$('th[data-sort]',el).forEach(h=>h.onclick=()=>{const k=h.dataset.sort;const cur=S.sort[view];S.sort[view]=[k,cur[0]===k?-cur[1]:(['name','vendor','cls','dos','urg','last'].includes(k)?1:-1)];renderView()});
-  $$('tbody tr[data-key]',el).forEach(tr=>tr.onclick=()=>openDetail(tr.dataset.key));
+  $$('tbody tr[data-key]',el).forEach(tr=>tr.onclick=e=>{if(e.target.closest('.selbox'))return;openDetail(tr.dataset.key)});
+  // tick boxes: one per row, and the header box for everything in this list (not only the rows drawn so far)
+  const syncSelAll=()=>{const a=$('#selAll',el);if(!a)return;const n=listKeys.filter(k=>S.sel.has(k)).length;a.checked=n>0&&n===listKeys.length;a.indeterminate=n>0&&n<listKeys.length};
+  $$('[data-sel]',el).forEach(c=>{c.onclick=e=>e.stopPropagation();c.onchange=()=>{const k=c.dataset.sel;if(c.checked)S.sel.add(k);else S.sel.delete(k);c.closest('tr').classList.toggle('is-sel',c.checked);syncSelAll();renderBulkBar()}});
+  $$('.selbox',el).forEach(l=>l.addEventListener('click',e=>e.stopPropagation()));
+  const sa=$('#selAll',el);if(sa){sa.onclick=e=>e.stopPropagation();sa.onchange=()=>{if(sa.checked)listKeys.forEach(k=>S.sel.add(k));else S.sel.clear();renderView()}}
+  syncSelAll();renderBulkBar();
   bindQdButtons(el);
   const m=$('#btnMore');if(m)m.onclick=()=>{S.limit+=200;renderView()};
   const box=$('.tablewrap.grid',el);
@@ -3046,7 +3159,7 @@ function howHtml(){
   <section><h3>Seasons</h3>
     <p>With about 15 months of history, the planner compares each department’s sales in the coming weeks last year with the weeks just before. That ratio scales the forecast, so Thanksgiving, December and summer beer are planned for before they arrive.</p></section>
   <section><h3>Tags</h3>
-    <p>Tags are your own labels, like “Re-check stock” or “Ask rep about price”. Open an item, type a tag under Tags and press Enter (a new tag is created the first time), or tap one you already use. Then pick it in the Tags filter on any list to see just those items; tick several to see items with any of them. Rename or delete a tag for every item at once in Settings. Tags are shared across your computers and included in exports.</p></section>
+    <p>Tags are your own labels, like “Re-check stock” or “Ask rep about price”. Open an item, type a tag under Tags and press Enter (a new tag is created the first time), or tap one you already use. Then pick it in the Tags filter on any list to see just those items; tick several to see items with any of them. To tag many items at once, tick the boxes beside them (or the box in the header for everything the list shows) and use Add tag in the bar at the bottom; the same bar removes a tag, adds the items to your order, or suppresses them. Rename or delete a tag for every item at once in Settings. Tags are shared across your computers and included in exports.</p></section>
   <section><h3>Building your order</h3>
     <p>Nothing goes on your order by itself. The Reorder list shows what the planner suggests and why; click <b>Add</b> on an item, or <b>Add all shown to order</b> after filtering (for example, to one distributor). QDs you add from the quick QD check go on too.</p>
     <p>The Order sheets show only what you added, one sheet per distributor. Change quantities there with − and +, take items off with ×, then copy or download each sheet for your rep. Your order is kept in this browser until you clear it.</p></section>
@@ -3103,6 +3216,8 @@ $('#syncStatus').onclick=showSyncError;
 $('#filesToggle').onclick=()=>{store.set('filesOpen',!filesOpen());renderFilesPanel()};
 $('#q').oninput=e=>{S.q=e.target.value;S.limit=200;renderView()};
 $('#btnExport').onclick=e=>{e.stopPropagation();const p=$('#exportPop'),open=p.hidden;closeMsel();if(open){renderExportPop();p.hidden=false;$('#btnExport').setAttribute('aria-expanded','true');$('[data-exp]',p).focus()}syncPopScrim()};
+$$('[data-bulk]').forEach(b=>b.onclick=e=>{e.stopPropagation();bulkAction(b.dataset.bulk)});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&S.sel.size&&$('#bulkPop').hidden&&!openMsel&&$('#overlay').hidden&&!e.target.closest('input,select,textarea')){S.sel.clear();renderView()}});
 $('#fReset').onclick=()=>{S.vendor=[];S.cat=[];S.flag=[];S.tag=[];S.limit=200;closeMsel();renderFilters();renderView()};
 let clearArmed=false;
 $('#btnClear').onclick=()=>{
