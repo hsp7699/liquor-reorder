@@ -496,7 +496,7 @@ textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12
     <div class="tabs" role="tablist" id="tabs"></div>
   </div>
   <div class="filters" id="filters">
-    <input type="search" id="q" placeholder="Search item, SKU or UPC" aria-label="Search items">
+    <input type="search" id="q" placeholder="Search, e.g. bacardi gold 375" aria-label="Search items">
     <div class="fbar">
     <div class="msel" id="fVendor"></div>
     <div class="msel" id="fCat"></div>
@@ -1569,15 +1569,25 @@ const FLAG={
 const chips=(r,skip=[])=>'<div class="chips">'+r.flags.filter(f=>!skip.includes(f)).map(f=>`<span class="chip ${FLAG[f][1]}">${FLAG[f][0]}</span>`).join('')+'</div>';
 const dosTxt=d=>!isFinite(d)?'—':d>=999?'999+':int(d);
 
+// one search everywhere: every typed word must appear somewhere in the item's name, size, pack, department, SKU or
+// UPC, in any order ("bacardi gold 375" finds Bacardi Gold 375ml); a typed code also matches part of a SKU or UPC
+function itemMatcher(q){
+  const words=String(q||'').trim().toLowerCase().split(/\s+/).filter(Boolean),c=normCode(q);
+  if(!words.length)return null;
+  return r=>{
+    const it=r.it,text=[it.name,it.size,it.pack,it.category,it.sku,it.upc].filter(Boolean).join(' ').toLowerCase();
+    return words.every(w=>text.includes(w))||(c.length>=3&&(normCode(it.sku).includes(c)||normCode(it.upc).includes(c)));
+  };
+}
 function filtered(){
   if(!S.res)return [];
-  const q=S.q.trim().toLowerCase(),qc=normCode(S.q);
+  const match=itemMatcher(S.q);
   return S.res.results.filter(r=>{
     // within one filter any ticked choice matches; across filters all must match
     if(S.vendor.length&&!S.vendor.includes(r.it.vendor))return false;
     if(S.cat.length&&!S.cat.includes(r.it.category))return false;
     if(S.flag.length&&!S.flag.some(f=>r.flags.includes(f)))return false;
-    if(q){const it=r.it;if(!(it.name.toLowerCase().includes(q)||(qc&&(normCode(it.sku).includes(qc)||normCode(it.upc).includes(qc)))))return false}
+    if(match&&!match(r))return false;
     return true;
   });
 }
@@ -2097,12 +2107,8 @@ function renderQuickShell(){
 // search box with a scrolling pick list; every word must match, so "bacardi gold 375" finds Bacardi Gold 375ml
 function bindItemSearch(inp,box,onPick,skip){
   inp.oninput=()=>{
-    const words=inp.value.trim().toLowerCase().split(/\s+/).filter(Boolean),c=normCode(inp.value);
-    const rs=!words.length||inp.value.trim().length<2?[]:S.res.results.filter(r=>{
-      if(skip&&skip.has(r.key))return false;
-      const l=quickLabel(r).toLowerCase();
-      return words.every(w=>l.includes(w))||(c&&(normCode(r.it.sku)===c||normCode(r.it.upc)===c));
-    }).sort((a,b)=>b.perWk-a.perWk).slice(0,40);
+    const match=inp.value.trim().length<2?null:itemMatcher(inp.value);
+    const rs=!match?[]:S.res.results.filter(r=>!(skip&&skip.has(r.key))&&match(r)).sort((a,b)=>b.perWk-a.perWk).slice(0,40);
     box.hidden=!rs.length;box.scrollTop=0;
     box.innerHTML=rs.map(r=>`<button type="button" data-pk="${esc(r.key)}">${esc(r.it.name)} <span class="sub">${esc([r.it.size,r.it.pack,r.it.category,dec1(r.perWk)+'/wk'].filter(Boolean).join(' · '))}</span></button>`).join('');
     $$('[data-pk]',box).forEach(b=>b.onclick=()=>{box.hidden=true;onPick(b.dataset.pk)});
@@ -2468,7 +2474,7 @@ function openDealEditor(init){
   };
   if(!existing&&init.preset)setAnchor(draft.anchor,true);
   else if(!existing&&init.anchor)setAnchor(init.anchor);
-  const search=(q,limit)=>{const s=q.trim().toLowerCase(),c=normCode(q);if(s.length<2)return [];return S.res.results.filter(r=>r.it.name.toLowerCase().includes(s)||(c&&normCode(r.it.sku)===c)||(c&&normCode(r.it.upc)===c)).sort((a,b)=>b.perWk-a.perWk).slice(0,limit)};
+  const search=(q,limit)=>{const match=q.trim().length<2?null:itemMatcher(q);if(!match)return [];return S.res.results.filter(match).sort((a,b)=>b.perWk-a.perWk).slice(0,limit)};
   const label=r=>`${esc(r.it.name)} <span class="sub">${esc([r.it.size,r.it.pack,r.it.category].filter(Boolean).join(' · '))}</span>`;
   function render(){
     const prevScroll=$('.drawer')?$('.drawer').scrollTop:0;
