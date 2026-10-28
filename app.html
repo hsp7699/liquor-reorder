@@ -179,6 +179,8 @@ table.items.buys{min-width:0}
 .msel-pop .check input{flex:none;margin:1px 0 0}
 .msel-pop .check>span:first-of-type{flex:1;min-width:0}
 .msel-pop .check .sub{flex:none;padding-left:8px}
+.msel-pop .check.zero>span:first-of-type{color:var(--muted)}
+.msel-note{font-size:11.5px}
 .exp-pop{left:auto;right:0;min-width:230px}
 .exp-pop .btn{justify-content:flex-start;text-align:left}
 .totals{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:baseline;font-size:13px;color:var(--ink-2);margin-top:-6px}
@@ -1625,18 +1627,32 @@ function itemMatcher(q){
     return words.every(w=>text.includes(w))||(c.length>=3&&(normCode(it.sku).includes(c)||normCode(it.upc).includes(c)));
   };
 }
+// what each filter looks at on an item
+const FACET_OF={vendor:r=>r.it.vendor,cat:r=>r.it.category,flag:r=>r.flags,tag:r=>tagsOf(r.key)};
+// within one filter any ticked choice matches; across filters all must match. `except` skips one filter (for its counts)
+function passes(r,match,except){
+  for(const id of Object.keys(FACET_OF)){
+    if(id===except||!S[id].length)continue;
+    const v=[].concat(FACET_OF[id](r));if(!S[id].some(x=>v.includes(x)))return false;
+  }
+  return !match||match(r);
+}
 function filtered(){
   if(!S.res)return [];
   const match=itemMatcher(S.q);
-  return S.res.results.filter(r=>{
-    // within one filter any ticked choice matches; across filters all must match
-    if(S.vendor.length&&!S.vendor.includes(r.it.vendor))return false;
-    if(S.cat.length&&!S.cat.includes(r.it.category))return false;
-    if(S.flag.length&&!S.flag.some(f=>r.flags.includes(f)))return false;
-    if(S.tag.length){const t=tagsOf(r.key);if(!S.tag.some(x=>t.includes(x)))return false}
-    if(match&&!match(r))return false;
-    return true;
-  });
+  return S.res.results.filter(r=>passes(r,match,''));
+}
+// the items a tab lists before any search or filter
+const inView=(r,view)=>view==='reorder'?isSuggested(r):view==='dead'?r.flags.includes('dead')||r.flags.includes('over'):view==='sheets'?r.ord>0:true;
+// a choice's count = how many items this tab would show if you ticked it: same tab, same search, the other filters as set
+function facetCounts(id){
+  const m=new Map();if(!S.res)return m;
+  const match=itemMatcher(S.q);
+  for(const r of S.res.results){
+    if(!inView(r,S.view)||!passes(r,match,id))continue;
+    for(const k of [].concat(FACET_OF[id](r)))m.set(k,(m.get(k)||0)+1);
+  }
+  return m;
 }
 const SORTERS={
   ord:r=>r.ordCost,
@@ -1875,10 +1891,10 @@ function renderMsel(id){
 function renderMselPop(id,q=''){
   const f=FILTERS[id],box=$('#'+f.el),pop=$('.msel-pop',box);
   const long=f.opts.length>8,ql=q.trim().toLowerCase();
-  const list=f.opts.filter(o=>!ql||o.label.toLowerCase().includes(ql));
+  const list=f.opts.filter(o=>!ql||o.label.toLowerCase().includes(ql)),cnt=facetCounts(id);
   pop.innerHTML=`<div class="mixpop-head"><b>${esc(f.all.replace(/^(All|Any) /,'').replace(/^./,c=>c.toUpperCase()))}</b><span><button type="button" class="btn ghost small" data-mall>Select all</button><button type="button" class="btn ghost small" data-mclear>Deselect all</button></span></div>`+
     (long?`<input type="search" placeholder="Find a ${f.one}" aria-label="Find a ${f.one}" value="${esc(q)}">`:'')+
-    `<div class="msel-list">${list.map(o=>`<label class="check"><input type="checkbox" value="${esc(o.k)}"${S[id].includes(o.k)?' checked':''}> <span>${esc(o.label)}</span> <span class="sub">${int(o.n)}</span></label>`).join('')||`<p class="hint">${f.opts.length?'Nothing matches.':esc(f.empty||'Nothing to pick.')}</p>`}</div>`;
+    `<p class="hint msel-note">Counts are for this list with your search and other filters.</p><div class="msel-list">${list.map(o=>`<label class="check${cnt.get(o.k)?'':' zero'}"><input type="checkbox" value="${esc(o.k)}"${S[id].includes(o.k)?' checked':''}> <span>${esc(o.label)}</span> <span class="sub">${int(cnt.get(o.k)||0)}</span></label>`).join('')||`<p class="hint">${f.opts.length?'Nothing matches.':esc(f.empty||'Nothing to pick.')}</p>`}</div>`;
   pop.onclick=e=>e.stopPropagation();
   const srch=$('input[type=search]',pop);
   if(srch)srch.oninput=()=>{renderMselPop(id,srch.value);const s2=$('input[type=search]',pop);s2.focus();s2.setSelectionRange(s2.value.length,s2.value.length)};
