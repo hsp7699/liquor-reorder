@@ -209,6 +209,16 @@ td.order b{font-weight:600;font-size:14px;font-variant-numeric:tabular-nums}
 .chip.warn{background:var(--warn-soft);color:var(--warn)}
 .chip.acc{background:var(--accent-soft);color:var(--accent)}
 .chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.tag{gap:4px;background:var(--surface);color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line)}
+.chip.tag .x{padding:0;margin-left:1px;display:inline-grid;place-items:center}
+.chip.tag.pick{border:0;cursor:pointer;font:inherit;font-size:11.5px;font-weight:500;padding:3px 9px}
+@media (hover:hover){.chip.tag.pick:hover{box-shadow:inset 0 0 0 1px var(--muted);color:var(--ink)}}
+.tagbox{display:flex;flex-direction:column;gap:8px}
+.tag-row,.tag-picks{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tag-lbl{font-size:12.5px;font-weight:600;color:var(--ink-2);margin-right:2px}
+.tag-add{display:flex;gap:8px;align-items:center}
+.tag-add input{flex:1;min-width:0;max-width:320px;min-height:34px;padding:6px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface)}
+@media (pointer:coarse){.chip.tag.pick{padding:8px 12px}.chip.tag .x::after{inset:-12px -10px}}
 .more{display:flex;justify-content:center;padding:12px}
 /* list views scroll inside their own box: headings stay put, the item column stays put sideways */
 .tablewrap.grid{max-height:calc(100vh - 150px);max-height:max(380px,calc(100dvh - 150px));overflow:auto}
@@ -501,6 +511,7 @@ textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12
     <div class="msel" id="fVendor"></div>
     <div class="msel" id="fCat"></div>
     <div class="msel" id="fFlag"></div>
+    <div class="msel" id="fTag"></div>
     <button class="btn ghost small" id="fReset" type="button" hidden>Clear filters</button>
     <span class="spacer"></span>
     <div class="msel" id="exportWrap"><button class="btn" id="btnExport" type="button" aria-haspopup="true" aria-expanded="false">Export <svg class="ic" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></button><div class="mixpop msel-pop exp-pop" id="exportPop" hidden></div></div>
@@ -561,7 +572,7 @@ function setOrder(key,units){
 // order changes reuse the forecast; only the deal and order quantities are applied again
 function refreshOrders(){if(!S.res){recompute();return}applyDeals();renderAll()}
 // one drawn icon set (16px grid, 1.6 stroke) instead of text glyphs
-const ICONS={down:'<path d="m4 6 4 4 4-4"/>',up:'<path d="m4 10 4-4 4 4"/>',x:'<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>',minus:'<path d="M4 8h8"/>',plus:'<path d="M8 4v8M4 8h8"/>'};
+const ICONS={tag:'<path d="M2.5 8.6V3.2c0-.4.3-.7.7-.7h5.4l4.9 4.9a1 1 0 0 1 0 1.4l-4 4a1 1 0 0 1-1.4 0z"/><circle cx="5.6" cy="5.6" r=".9" fill="currentColor" stroke="none"/>',down:'<path d="m4 6 4 4 4-4"/>',up:'<path d="m4 10 4-4 4 4"/>',x:'<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>',minus:'<path d="M4 8h8"/>',plus:'<path d="M8 4v8M4 8h8"/>'};
 const ic=(n,size=14)=>`<svg class="ic" viewBox="0 0 16 16" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
 const qtyShort=(r,u)=>r.byCase?`${int(u/r.pack)} cs`:`${int(u)} unit${u===1?'':'s'}`;
 const samplerP=(window.claude&&window.claude.use)?window.claude.use('sample').catch(()=>null):Promise.resolve(null);
@@ -779,8 +790,43 @@ const SAMPLE_V={'Valley Beer Distributors':{lead:2,cycle:7,min:300},'Coastal Win
 const SAMPLE_OV={};
 const vendorOf=v=>Object.assign({},VDEF,S.sample?SAMPLE_V[v]||{}:{},vendorCfg[v]||{});
 const getOv=k=>Object.assign({},S.sample?SAMPLE_OV[k]||{}:{},overrides[k]||{});
+/* ---------- tags: your own labels on items ("Re-check stock"), kept with the item's adjustments so every computer sees them ---------- */
+const cleanTag=t=>String(t??'').trim().replace(/\s+/g,' ').slice(0,40);
+const tagsOf=k=>getOv(k).tags||[];
+// tags you've created (kept in settings, so a new tag exists before it's on any item) plus any tag on an item
+function allTags(){
+  const set=new Map();
+  for(const t of settings.tags||[])set.set(t.toLowerCase(),t);
+  for(const o of Object.values(overrides))for(const t of (o&&o.tags)||[])if(!set.has(t.toLowerCase()))set.set(t.toLowerCase(),t);
+  return [...set.values()].sort((a,b)=>a.localeCompare(b));
+}
+// returns the tag's existing spelling when it already exists in any case
+function ensureTag(name){
+  name=cleanTag(name);if(!name)return '';
+  const ex=allTags().find(t=>t.toLowerCase()===name.toLowerCase());if(ex)return ex;
+  settings.tags=[...(settings.tags||[]),name];store.set('settings',settings);return name;
+}
+function setItemTags(key,tags){
+  const o=Object.assign({},overrides[key]||{}),seen=new Set(),t=[];
+  for(const x of tags.map(cleanTag))if(x&&!seen.has(x.toLowerCase())){seen.add(x.toLowerCase());t.push(x)}
+  if(t.length)o.tags=t;else delete o.tags;
+  overrides[key]=o;store.set('overrides',overrides);
+}
+// rename or delete a tag everywhere (to=null deletes)
+function renameTag(from,to){
+  const lo=from.toLowerCase();to=to==null?null:cleanTag(to);
+  for(const [k,o] of Object.entries(overrides)){
+    if(!o||!(o.tags||[]).some(t=>t.toLowerCase()===lo))continue;
+    setItemTags(k,o.tags.flatMap(t=>t.toLowerCase()===lo?(to?[to]:[]):[t]));
+  }
+  const list=(settings.tags||[]).filter(t=>t.toLowerCase()!==lo);
+  if(to&&!list.some(t=>t.toLowerCase()===to.toLowerCase()))list.push(to);
+  settings.tags=list;store.set('settings',settings);
+  S.tag=S.tag.filter(t=>t.toLowerCase()!==lo).concat(to&&S.tag.some(t=>t.toLowerCase()===lo)?[to]:[]);
+}
+const tagChip=t=>`<span class="chip tag">${ic('tag',11)}${esc(t)}</span>`;
 
-const S={sample:true,inv:null,sales:[],purch:null,pending:[],res:null,view:'reorder',q:'',vendor:[],cat:[],flag:[],limit:200,showAllFiles:false,
+const S={sample:true,inv:null,sales:[],purch:null,pending:[],res:null,view:'reorder',q:'',vendor:[],cat:[],flag:[],tag:[],limit:200,showAllFiles:false,
   quick:{anchor:'',qty:'',countIn:'case',mixSizes:false,mixFlavors:false,disc:'',extra:[],manual:{},review:{},why:{},note:'',busy:null},
   sort:{reorder:['urg',1],all:['name',1],dead:['tied',-1]}};
 
@@ -1566,7 +1612,7 @@ const FLAG={
   onorder:['On your order','acc'],
   oos:['Out of stock','crit'],risk:['Runs out before delivery','warn'],count:['Negative count','crit'],hold:['Suppressed','idle'],
   qd:['Quantity deal','ok'],new:['New item','acc'],dead:['No recent sales','idle'],over:['Overstocked','idle'],fixed:['Stockouts ignored','idle'],spread:['Period totals','idle']};
-const chips=(r,skip=[])=>'<div class="chips">'+r.flags.filter(f=>!skip.includes(f)).map(f=>`<span class="chip ${FLAG[f][1]}">${FLAG[f][0]}</span>`).join('')+'</div>';
+const chips=(r,skip=[])=>'<div class="chips">'+r.flags.filter(f=>!skip.includes(f)).map(f=>`<span class="chip ${FLAG[f][1]}">${FLAG[f][0]}</span>`).join('')+(skip.includes('tags')?'':tagsOf(r.key).map(tagChip).join(''))+'</div>';
 const dosTxt=d=>!isFinite(d)?'—':d>=999?'999+':int(d);
 
 // one search everywhere: every typed word must appear somewhere in the item's name, size, pack, department, SKU or
@@ -1587,6 +1633,7 @@ function filtered(){
     if(S.vendor.length&&!S.vendor.includes(r.it.vendor))return false;
     if(S.cat.length&&!S.cat.includes(r.it.category))return false;
     if(S.flag.length&&!S.flag.some(f=>r.flags.includes(f)))return false;
+    if(S.tag.length){const t=tagsOf(r.key);if(!S.tag.some(x=>t.includes(x)))return false}
     if(match&&!match(r))return false;
     return true;
   });
@@ -1766,7 +1813,7 @@ function renderKpis(){
 function goTab(v,flag=''){
   if(v!==S.view){
     resetQuick();
-    S.q='';S.vendor=[];S.cat=[];S.flag=[];$('#q').value='';
+    S.q='';S.vendor=[];S.cat=[];S.flag=[];S.tag=[];$('#q').value='';
   }
   if(flag)S.flag=[flag];
   S.view=v;S.limit=200;renderTabs();renderFilters();renderView();
@@ -1792,6 +1839,9 @@ function renderFilters(){
   FILTERS.vendor.opts=vs.map(v=>({k:v,label:v,n:vc.get(v)}));
   FILTERS.cat.opts=cs.map(v=>({k:v,label:v,n:cc.get(v)}));
   FILTERS.flag.opts=Object.entries(FLAG).map(([k,[l]])=>({k,label:l,n:fc.get(k)||0}));
+  const tc=count(x=>tagsOf(x.key)),tl=allTags();
+  S.tag=S.tag.filter(t=>tl.includes(t));
+  FILTERS.tag.opts=tl.map(t=>({k:t,label:t,n:tc.get(t)||0}));
   for(const id of Object.keys(FILTERS))renderMsel(id);
   $('#exportWrap').hidden=!['reorder','all','dead'].includes(S.view);
   $('#btnExportAll').hidden=S.view!=='sheets'&&S.view!=='reorder';
@@ -1803,7 +1853,8 @@ function renderFilters(){
 const FILTERS={
   vendor:{el:'fVendor',all:'All distributors',one:'distributor',many:'distributors',opts:[]},
   cat:{el:'fCat',all:'All departments',one:'department',many:'departments',opts:[]},
-  flag:{el:'fFlag',all:'Any status',one:'status',many:'statuses',opts:[]}};
+  flag:{el:'fFlag',all:'Any status',one:'status',many:'statuses',opts:[]},
+  tag:{el:'fTag',all:'Any tag',one:'tag',many:'tags',opts:[],empty:'No tags yet. Open an item and add one under Tags.'}};
 let openMsel='',mselJust='';
 function mselLabel(id){
   const f=FILTERS[id],sel=S[id];
@@ -1827,7 +1878,7 @@ function renderMselPop(id,q=''){
   const list=f.opts.filter(o=>!ql||o.label.toLowerCase().includes(ql));
   pop.innerHTML=`<div class="mixpop-head"><b>${esc(f.all.replace(/^(All|Any) /,'').replace(/^./,c=>c.toUpperCase()))}</b><span><button type="button" class="btn ghost small" data-mall>Select all</button><button type="button" class="btn ghost small" data-mclear>Deselect all</button></span></div>`+
     (long?`<input type="search" placeholder="Find a ${f.one}" aria-label="Find a ${f.one}" value="${esc(q)}">`:'')+
-    `<div class="msel-list">${list.map(o=>`<label class="check"><input type="checkbox" value="${esc(o.k)}"${S[id].includes(o.k)?' checked':''}> <span>${esc(o.label)}</span> <span class="sub">${int(o.n)}</span></label>`).join('')||'<p class="hint">Nothing matches.</p>'}</div>`;
+    `<div class="msel-list">${list.map(o=>`<label class="check"><input type="checkbox" value="${esc(o.k)}"${S[id].includes(o.k)?' checked':''}> <span>${esc(o.label)}</span> <span class="sub">${int(o.n)}</span></label>`).join('')||`<p class="hint">${f.opts.length?'Nothing matches.':esc(f.empty||'Nothing to pick.')}</p>`}</div>`;
   pop.onclick=e=>e.stopPropagation();
   const srch=$('input[type=search]',pop);
   if(srch)srch.oninput=()=>{renderMselPop(id,srch.value);const s2=$('input[type=search]',pop);s2.focus();s2.setSelectionRange(s2.value.length,s2.value.length)};
@@ -1941,7 +1992,7 @@ function renderView(){
   const restHead=qdGroups.length&&shown.length?`<tr class="qd-head rest"><td colspan="${cols}"><b>Everything else</b></td></tr>`:'';
   const nSup=view==='reorder'?r.results.filter(x=>x.held).length:0;
   // keep the box where it was when only the numbers changed (an item added, a sync); start at the top for a new list
-  const gridKey=JSON.stringify([view,S.q,S.vendor,S.cat,S.flag,S.sort[view]]),oldBox=$('.tablewrap.grid',el);
+  const gridKey=JSON.stringify([view,S.q,S.vendor,S.cat,S.flag,S.tag,S.sort[view]]),oldBox=$('.tablewrap.grid',el);
   const keep=oldBox&&gridKey===lastGridKey?[oldBox.scrollTop,oldBox.scrollLeft]:null;lastGridKey=gridKey;
   if(oldBox)oldBox.onscroll=null;   // a box being replaced reports a last scroll at height 0
   el.innerHTML=`<div class="tablewrap grid"><table class="items list"><thead>${head}</thead><tbody>${groupHtml}${restHead}${shown.map(row).join('')}</tbody></table>${list.length||qdGroups.length?'':`<div class="empty">${emptyMsg}</div>`}${list.length>S.limit?`<div class="more"><button class="btn" id="btnMore" type="button">Show ${int(Math.min(200,list.length-S.limit))} more of ${int(list.length-S.limit)}</button></div>`:''}</div>${nSup?`<div class="supp-note">${int(nSup)} item${nSup===1?' is':'s are'} suppressed and won’t be suggested. <button class="btn ghost small" id="btnViewSup" type="button">View suppressed</button></div>`:''}`;
@@ -1975,10 +2026,10 @@ function exportTable(view){
   const rows=viewRows(view),T=S.res.ctx.T;
   const r2=v=>Math.round(v*100)/100,r1=v=>Math.round(v*10)/10;
   const head=['Item #','UPC','Description','Size','Pack','Department','Distributor','Rank','On hand','On order','Sells / week','Days of supply','Next 30 days','Next 60 days','Next 90 days',
-    'Suggested units','Suggested cases','Units per case','Last cost','Retail price','Margin %','Suggested cost','On your order (units)','Order cost','Last sold','Days since sale','Cash tied up','Status'];
+    'Suggested units','Suggested cases','Units per case','Last cost','Retail price','Margin %','Suggested cost','On your order (units)','Order cost','Last sold','Days since sale','Cash tied up','Status','Tags'];
   const body=rows.map(x=>{const it=x.it;return [it.sku,it.upc,it.name,it.size,it.pack,it.category,it.vendor,x.cls,x.onHand,x.onOrder,r1(x.perWk),isFinite(x.dos)?Math.round(x.dos):'',
     Math.round(x.f30),Math.round(x.f60),Math.round(x.f90),x.units,x.byCase?x.cases:'',x.pack,it.cost?r2(it.cost):'',it.price?r2(it.price):'',it.cost>0&&it.price>0?Math.round((it.price-it.cost)/it.price*100):'',
-    x.units?r2(x.cost):'',x.ord||'',x.ord?r2(x.ordCost):'',x.lastSale!=null?toIso(x.lastSale):'',x.daysSince??'',x.tied?r2(x.tied):'',x.flags.map(f=>FLAG[f]?FLAG[f][0]:f).join('; ')]});
+    x.units?r2(x.cost):'',x.ord||'',x.ord?r2(x.ordCost):'',x.lastSale!=null?toIso(x.lastSale):'',x.daysSince??'',x.tied?r2(x.tied):'',x.flags.map(f=>FLAG[f]?FLAG[f][0]:f).join('; '),tagsOf(x.key).join('; ')]});
   return {head,body,name:`${VIEW_NAME[view]||view}-${toIso(T-1)}`};
 }
 function exportView(fmt){
@@ -2629,7 +2680,8 @@ function openDetail(key){
   const orderTxt=r.units?(r.byCase?`${r.cases} case${r.cases===1?'':'s'} × ${r.pack} = ${int(r.units)} units`:`${int(r.units)} units`):(r.held?'Suppressed (your setting)':r.base<=0?'No recent sales':'Nothing needed');
   const d=openPanel(`
     <div class="drawer-head"><div><h2>${esc(it.name)}</h2><div class="sub">${esc([it.size,it.sku&&'#'+it.sku,it.upc&&'UPC '+it.upc].filter(Boolean).join(' · '))}</div></div><button class="btn ghost" data-close type="button">Close</button></div>
-    <div class="row"><span class="abc ${r.cls}">${r.cls}</span><span class="hint">${esc(it.vendor)} · ${esc(it.category)}</span>${chips(r)}</div>
+    <div class="row"><span class="abc ${r.cls}">${r.cls}</span><span class="hint">${esc(it.vendor)} · ${esc(it.category)}</span>${chips(r,['tags'])}</div>
+    <div class="tagbox" id="dTags"></div>
     <div class="facts">
       <div class="fact"><div class="k">On hand</div><div class="v">${int(r.onHand)}</div></div>
       <div class="fact"><div class="k">Sells / week</div><div class="v">${dec1(r.perWk)}</div></div>
@@ -2679,6 +2731,7 @@ function openDetail(key){
   `);
   drawChart($('#chart',d),r);
   drawStockChart($('#stockChart',d),r);
+  renderTagBox(key);
   if($('#dAdd'))$('#dAdd').onclick=()=>{setOrder(key,r.units>0?r.units:stepOf(r));toast(`Added ${it.name} to your order`);openDetail(key)};
   if($('#dOff'))$('#dOff').onclick=()=>{setOrder(key,0);toast(`Took ${it.name} off your order`);openDetail(key)};
   const upd=()=>{
@@ -2752,6 +2805,22 @@ function vizTable(head,rows){
 
 // Sales per week: one hue for what sold, a lighter step for the forecast, grey for stockout weeks the rate ignores,
 // and the selling rate the order uses as a reference line labelled at its end
+// Tags on one item: its chips with a remove button, a box to type a new or existing tag, and one-tap picks
+function renderTagBox(key){
+  const box=$('#dTags');if(!box)return;
+  const mine=tagsOf(key),others=allTags().filter(t=>!mine.includes(t)),name=(S.res.byKey.get(key)||{it:{name:''}}).it.name;
+  box.innerHTML=`<div class="tag-row"><span class="tag-lbl">Tags</span>${mine.map(t=>`<span class="chip tag">${ic('tag',11)}${esc(t)}<button class="x" type="button" data-untag="${esc(t)}" aria-label="Remove tag ${esc(t)} from ${esc(name)}">${ic('x',12)}</button></span>`).join('')||'<span class="hint">None yet</span>'}</div>
+    <form class="tag-add" id="tagForm"><input id="tagIn" list="tagList" maxlength="40" autocomplete="off" placeholder="Add a tag, e.g. Re-check stock" aria-label="Add a tag to ${esc(name)}"><datalist id="tagList">${others.map(t=>`<option value="${esc(t)}">`).join('')}</datalist><button class="btn small" type="submit">Add tag</button></form>
+    ${others.length?`<div class="tag-picks"><span class="hint">Tap to add:</span>${others.slice(0,8).map(t=>`<button class="chip tag pick" type="button" data-addtag="${esc(t)}">${ic('plus',11)}${esc(t)}</button>`).join('')}</div>`:''}`;
+  const after=(msg,focus)=>{renderTagBox(key);renderFilters();renderView();if(msg)toast(msg);if(focus){const i=$('#tagIn');if(i)i.focus()}};
+  $('#tagForm').onsubmit=e=>{
+    e.preventDefault();const t=ensureTag($('#tagIn').value);if(!t)return;
+    if(tagsOf(key).includes(t)){$('#tagIn').value='';return}
+    setItemTags(key,[...tagsOf(key),t]);after(`Tagged ${name} “${t}”`,true);
+  };
+  $$('[data-addtag]',box).forEach(b=>b.onclick=()=>{setItemTags(key,[...tagsOf(key),b.dataset.addtag]);after(`Tagged ${name} “${b.dataset.addtag}”`)});
+  $$('[data-untag]',box).forEach(b=>b.onclick=()=>{const t=b.dataset.untag;setItemTags(key,tagsOf(key).filter(x=>x!==t));after(`Removed “${t}” from ${name}`)});
+}
 function drawChart(el,r){
   const T=S.res.ctx.T,ctx=S.res.ctx;
   const slots=[];
@@ -2893,6 +2962,10 @@ function openSettings(){
     <div class="field" style="margin-top:10px"><label for="sSpeed">How fast the selling rate follows recent weeks</label><select id="sSpeed"><option value="fast"${settings.rateSpeed==='fast'?' selected':''}>Fast: a week from 2 weeks ago counts half</option><option value="normal"${settings.rateSpeed!=='fast'&&settings.rateSpeed!=='steady'?' selected':''}>Normal: a week from 3 weeks ago counts half (recommended)</option><option value="steady"${settings.rateSpeed==='steady'?' selected':''}>Steady: a week from 6 weeks ago counts half</option></select></div>
     <label class="check" style="margin-top:10px"><input id="sSeason" type="checkbox"${settings.useSeason?' checked':''}> Adjust for seasons using last year’s sales (needs about 15 months of history)</label>
     <label class="check" style="margin-top:6px"><input id="sEst" type="checkbox"${settings.estPack?' checked':''}> Estimate case size from bottle size and pack when the file has none (750ml = 12, 1.75L = 6, beer 6pk = 4, 12pk = 2…)</label></div>
+    <div><div class="label" style="margin-bottom:8px">Tags</div>
+    <p class="hint" style="margin-bottom:8px">Your own labels for items, like “Re-check stock”. Add them from an item’s details and filter by them on any list. Renaming or deleting here changes every item.</p>
+    <div id="tagTable"></div>
+    <form class="tag-add" id="sTagForm" style="margin-top:8px"><input id="sTagIn" maxlength="40" autocomplete="off" placeholder="New tag" aria-label="New tag"><button class="btn small" type="submit">Create tag</button></form></div>
     <div class="row"><button class="btn" id="sReset" type="button">Reset all settings and item adjustments</button><span class="hint" id="sResetMsg"></span></div>
     ${cloud.on&&cloud.user==='store'?'<div class="row"><button class="btn ghost" id="sSignOut" type="button">Sign out of shared storage on this computer</button><span class="hint">You’ll need the store password to open it again.</span></div>':''}
   `);
@@ -2901,6 +2974,16 @@ function openSettings(){
   $('#sSpeed').onchange=e=>{settings.rateSpeed=e.target.value;store.set('settings',settings);later()};
   $('#sSeason').onchange=e=>{settings.useSeason=e.target.checked;store.set('settings',settings);later()};
   $('#sEst').onchange=e=>{settings.estPack=e.target.checked;store.set('settings',settings);later()};
+  const renderTagTable=()=>{
+    const tl=allTags(),cnt=t=>Object.values(overrides).filter(o=>o&&(o.tags||[]).includes(t)).length;
+    $('#tagTable',d).innerHTML=tl.length?`<div class="tablewrap"><table class="vend"><thead><tr><th>Tag</th><th>Items</th><th></th></tr></thead><tbody>${tl.map((t,i)=>`<tr><td><input id="tg${i}" data-tg="${esc(t)}" value="${esc(t)}" maxlength="40" aria-label="Rename tag ${esc(t)}" style="max-width:none"></td><td class="mono">${cnt(t)}</td><td style="text-align:right"><button class="btn small ghost" type="button" data-tgdel="${esc(t)}">Delete</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="hint">No tags yet.</p>';
+    $$('[data-tg]',d).forEach(inp=>inp.onchange=()=>{const v=cleanTag(inp.value),from=inp.dataset.tg;if(!v||v===from){inp.value=from;return}renameTag(from,v);
+      // change fires as the box loses focus; redraw once that's finished, not while the box is still being left
+      setTimeout(()=>{renderTagTable();renderFilters();renderView()},0);toast(`Renamed “${from}” to “${v}”`)});
+    $$('[data-tgdel]',d).forEach(b=>{let armed=false;b.onclick=()=>{const t=b.dataset.tgdel,n=cnt(t);if(n&&!armed){armed=true;b.textContent=`Remove from ${n} item${n===1?'':'s'}?`;setTimeout(()=>{armed=false;b.textContent='Delete'},5000);return}renameTag(t,null);renderTagTable();renderFilters();renderView();toast(`Deleted tag “${t}”`)}});
+  };
+  renderTagTable();
+  $('#sTagForm',d).onsubmit=e=>{e.preventDefault();const t=ensureTag($('#sTagIn',d).value);if(!t)return;$('#sTagIn',d).value='';renderTagTable();renderFilters();toast(`Created tag “${t}”`)};
   const renderVend=()=>{
     const vs=S.res?[...new Set(S.res.results.map(x=>x.it.vendor))].sort():[];
     $('#deptVendList').innerHTML=vs.filter(v=>v!==NO_DIST).map(v=>`<option value="${esc(v)}">`).join('');
@@ -2916,7 +2999,7 @@ function openSettings(){
   let armed=false;
   if($('#sSignOut'))$('#sSignOut').onclick=signOut;
   $('#sReset').onclick=()=>{
-    if(!armed){armed=true;$('#sReset').textContent='Click again to reset';$('#sResetMsg').textContent='This clears distributor settings and every item adjustment.';return}
+    if(!armed){armed=true;$('#sReset').textContent='Click again to reset';$('#sResetMsg').textContent='This clears distributor settings, every item adjustment and all tags.';return}
     settings=Object.assign({},DEFAULTS);vendorCfg={};overrides={};deptCfg={};
     store.set('settings',settings);store.set('vendors',vendorCfg);store.set('overrides',overrides);store.set('depts',deptCfg);
     recompute();openSettings();toast('Settings reset');
@@ -2937,6 +3020,8 @@ function howHtml(){
     <p>One unusually big week (a party or bar order) counts as at most 2½ typical weeks, so it doesn’t inflate the next order.</p></section>
   <section><h3>Seasons</h3>
     <p>With about 15 months of history, the planner compares each department’s sales in the coming weeks last year with the weeks just before. That ratio scales the forecast, so Thanksgiving, December and summer beer are planned for before they arrive.</p></section>
+  <section><h3>Tags</h3>
+    <p>Tags are your own labels, like “Re-check stock” or “Ask rep about price”. Open an item, type a tag under Tags and press Enter (a new tag is created the first time), or tap one you already use. Then pick it in the Tags filter on any list to see just those items; tick several to see items with any of them. Rename or delete a tag for every item at once in Settings. Tags are shared across your computers and included in exports.</p></section>
   <section><h3>Building your order</h3>
     <p>Nothing goes on your order by itself. The Reorder list shows what the planner suggests and why; click <b>Add</b> on an item, or <b>Add all shown to order</b> after filtering (for example, to one distributor). QDs you add from the quick QD check go on too.</p>
     <p>The Order sheets show only what you added, one sheet per distributor. Change quantities there with − and +, take items off with ×, then copy or download each sheet for your rep. Your order is kept in this browser until you clear it.</p></section>
@@ -2993,7 +3078,7 @@ $('#syncStatus').onclick=showSyncError;
 $('#filesToggle').onclick=()=>{store.set('filesOpen',!filesOpen());renderFilesPanel()};
 $('#q').oninput=e=>{S.q=e.target.value;S.limit=200;renderView()};
 $('#btnExport').onclick=e=>{e.stopPropagation();const p=$('#exportPop'),open=p.hidden;closeMsel();if(open){renderExportPop();p.hidden=false;$('#btnExport').setAttribute('aria-expanded','true');$('[data-exp]',p).focus()}syncPopScrim()};
-$('#fReset').onclick=()=>{S.vendor=[];S.cat=[];S.flag=[];S.limit=200;closeMsel();renderFilters();renderView()};
+$('#fReset').onclick=()=>{S.vendor=[];S.cat=[];S.flag=[];S.tag=[];S.limit=200;closeMsel();renderFilters();renderView()};
 let clearArmed=false;
 $('#btnClear').onclick=()=>{
   const b=$('#btnClear');
