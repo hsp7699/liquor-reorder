@@ -1333,7 +1333,7 @@ function buildAgg(){
   for(const f of S.sales)for(const r of f.rows){
     totalRows++;
     const it=(r.sku&&(bySku.get(r.sku)||byUpc.get(r.sku)))||(r.upc&&(byUpc.get(r.upc)||bySku.get(r.upc)))||(r.nms&&byName.get(r.nms))||(r.nm&&(byNm.get(r.nm)||byName.get(r.nm)));
-    if(!it){const k=r.label||'(blank)';unmatched.set(k,(unmatched.get(k)||0)+r.qty);continue}
+    if(!it){const k=(r.sku||r.upc||'')+'|'+(r.label||'(blank)');const u=unmatched.get(k)||{label:r.label||'(blank)',sku:r.sku,upc:r.upc,qty:0};u.qty+=r.qty;unmatched.set(k,u);continue}
     matched++;
     if(skipD.has(it.category))continue;
     let st=stat.get(it.key);
@@ -1848,8 +1848,8 @@ function renderSources(){
     else if(noDistSold)notes.push(`<span><button class="btn ghost small" type="button" data-vfilter="${esc(NO_DIST)}">${int(noDistSold)} selling item${noDistSold===1?' has':'s have'} no distributor</button> ${noDistSold===1?'It wasn’t':'They weren’t'} in the purchase report. Set one in the item’s details or by department in Settings.</span>`);
     if(notes.length)h+=`<div class="matchline">${notes.join('')}</div>`;
     if(r.unmatched.size){
-      const top=[...r.unmatched.entries()].sort((a,b)=>b[1]-a[1]).slice(0,60);
-      h+=`<details class="unmatched"><summary>${int(r.unmatched.size)} sold item${r.unmatched.size===1?' isn’t':'s aren’t'} in the inventory list and ${r.unmatched.size===1?'was':'were'} skipped</summary><ul>${top.map(([k,q])=>`<li>${esc(k)} <span class="mono">(${int(q)} sold)</span></li>`).join('')}</ul></details>`;
+      const top=[...r.unmatched.values()].sort((a,b)=>b.qty-a.qty);
+      h+=`<details class="unmatched"><summary>${int(r.unmatched.size)} sold item${r.unmatched.size===1?' isn’t':'s aren’t'} in the inventory list and ${r.unmatched.size===1?'was':'were'} skipped</summary><ul>${top.map(u=>`<li>${esc(u.label)} <span class="mono">${u.sku?'#'+esc(u.sku):u.upc?'UPC '+esc(u.upc):'no item #'} · ${int(u.qty)} sold</span></li>`).join('')}</ul></details>`;
     }
   }
   $('#matchInfo').innerHTML=h;$('#matchInfo').hidden=!h;
