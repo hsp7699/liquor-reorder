@@ -212,6 +212,12 @@ td.order b{font-weight:600;font-size:14px;font-variant-numeric:tabular-nums}
 .chip.acc{background:var(--accent-soft);color:var(--accent)}
 .chip.ok{background:var(--ok-soft);color:var(--ok)}
 .cellsel{display:flex;gap:10px;align-items:flex-start}.cellbody{min-width:0}
+/* smaller packs sit under their family's pack, as one block */
+table.items tbody tr.has-kids td,table.items tbody tr.kid:not(.kid-last) td{border-bottom-color:transparent}
+table.items tbody tr.kid td{padding-top:2px;padding-bottom:8px;font-size:12.5px;color:var(--ink-2)}
+.kidcell{display:flex;gap:8px;align-items:flex-start;padding-left:28px}
+.kidcell .elbow{flex:none;width:10px;height:11px;margin-top:1px;border-left:1.5px solid var(--line);border-bottom:1.5px solid var(--line);border-bottom-left-radius:4px}
+.kidcell .nm{font-weight:500;color:var(--ink)}
 .selbox{position:relative;isolation:isolate;display:inline-grid;place-items:center;flex:none;width:18px;height:20px;cursor:pointer}
 .selbox::after{content:"";position:absolute;inset:-10px -8px;z-index:-1}
 .selbox.head::after{inset:-6px -8px}
@@ -433,6 +439,10 @@ textarea.copy{width:100%;min-height:200px;font-family:var(--f-mono);font-size:12
   table.items.list td.c-days{text-align:left}
   table.items.list td.c-total::before{content:"Total ";color:var(--muted)}
   table.items.list td.c-total{text-align:left}
+  table.items.list tbody tr.kid{padding:0 14px 10px 14px;gap:0;grid-template-areas:"item item"}
+  table.items.list tbody tr.has-kids,table.items.list tbody tr.kid:not(.kid-last){border-bottom:0}
+  table.items.list tbody tr.kid td.act{display:none}
+  .kidcell{padding-left:28px}
   table.items.list tr.qd-head{display:block}table.items.list tr.qd-head td{display:block;padding:10px 14px}
   .m-meta{display:flex;flex-wrap:wrap;gap:3px 12px;margin-top:5px;font-size:12.5px;color:var(--ink-2)}
   .m-meta span{white-space:nowrap}
@@ -1452,7 +1462,11 @@ function compute(){
   const overlaps=new Set();
   S.sales.forEach((a,i)=>S.sales.forEach((b,j)=>{if(i<j&&a.from<=b.to&&b.from<=a.to){overlaps.add(i);overlaps.add(j)}}));
   const allDepts=new Map();for(const it of items)allDepts.set(it.category,(allDepts.get(it.category)||0)+1);
-  S.res={ctx,results,byKey:new Map(results.map(r=>[r.key,r])),unmatched,matched,totalRows,hasSales,overlaps,allDepts,pMatched:A.pMatched,pRows:A.pRows};
+  const byKey=new Map(results.map(r=>[r.key,r]));
+  // each family pack carries its smaller packs, biggest first, to list them under it
+  for(const x of results)if(x.child){const p=byKey.get(x.child);if(p)(p.kids||(p.kids=[])).push(x)}
+  for(const x of results)if(x.kids)x.kids.sort((a,b)=>b.it.famN-a.it.famN);
+  S.res={ctx,results,byKey,unmatched,matched,totalRows,hasSales,overlaps,allDepts,pMatched:A.pMatched,pRows:A.pRows};
   applyDeals();
 }
 
@@ -1746,6 +1760,7 @@ function forecastItem(it,ctx){
   if(it.spread)flags.push('spread');
   // a child pack is never ordered: its sales and stock are in its family's pack
   if(child)flags.splice(0,flags.length,'child');
+  if(it.family)flags.push('family');
   const overUnits=flags.includes('over')?Math.max(0,onHand-daily30*settings.overstockDays):0;
   const tied=child?0:dead?onHand*it.cost:overUnits*it.cost;
   const urg=flags.includes('oos')?0:flags.includes('risk')?1:units>0?2:3;
@@ -1757,7 +1772,7 @@ function forecastItem(it,ctx){
 /* ---------- rendering ---------- */
 const FLAG={
   onorder:['On your order','acc'],
-  oos:['Out of stock','crit'],risk:['Runs out before delivery','warn'],count:['Negative count','crit'],hold:['Suppressed','idle'],child:['Child pack','idle'],
+  oos:['Out of stock','crit'],risk:['Runs out before delivery','warn'],count:['Negative count','crit'],hold:['Suppressed','idle'],child:['Child pack','idle'],family:['Pack family','idle'],
   qd:['Quantity deal','ok'],new:['New item','acc'],dead:['No recent sales','idle'],over:['Overstocked','idle'],fixed:['Stockouts ignored','idle'],spread:['Period totals','idle']};
 const chips=(r,skip=[])=>'<div class="chips">'+r.flags.filter(f=>!skip.includes(f)).map(f=>`<span class="chip ${FLAG[f][1]}">${FLAG[f][0]}</span>`).join('')+(skip.includes('tags')?'':tagsOf(r.key).map(tagChip).join(''))+'</div>';
 const dosTxt=d=>!isFinite(d)?'—':d>=999?'999+':int(d);
@@ -1782,6 +1797,8 @@ function passes(r,match,except){
   }
   return !match||match(r);
 }
+// smaller packs are listed under their family's pack, so a search or filter that finds one shows the pack
+const famPass=(r,match,except)=>passes(r,match,except)||!!(r.kids&&r.kids.some(k=>passes(k,match,except)));
 function filtered(){
   if(!S.res)return [];
   const match=itemMatcher(S.q);
@@ -1794,7 +1811,7 @@ function facetCounts(id){
   const m=new Map();if(!S.res)return m;
   const match=itemMatcher(S.q);
   for(const r of S.res.results){
-    if(!inView(r,S.view)||!passes(r,match,id))continue;
+    if(r.child||!inView(r,S.view)||!famPass(r,match,id))continue;
     for(const k of [].concat(FACET_OF[id](r)))m.set(k,(m.get(k)||0)+1);
   }
   return m;
@@ -1986,7 +2003,7 @@ function goTab(v,flag=''){
 function renderTabs(){
   const r=S.res;
   // each count is what that tab lists when you open it: Order sheets = one sheet per distributor on your order
-  const c=r?{reorder:r.results.filter(isSuggested).length,all:r.results.length,dead:r.results.filter(x=>x.flags.includes('dead')||x.flags.includes('over')).length,sheets:new Set(r.results.filter(x=>x.ord>0).map(x=>x.it.vendor)).size}:{};
+  const c=r?{reorder:r.results.filter(x=>!x.child&&isSuggested(x)).length,all:r.results.filter(x=>!x.child).length,dead:r.results.filter(x=>x.flags.includes('dead')||x.flags.includes('over')).length,sheets:new Set(r.results.filter(x=>x.ord>0).map(x=>x.it.vendor)).size}:{};
   if(r)c.deals=dealsList().length;
   const T=[['reorder','Reorder'],['sheets','Order sheets'],['deals','Quantity deals'],['all','All items'],['dead','Dead & overstock'],['how','How it works']];
   $('#tabs').innerHTML=T.map(([k,l])=>`<button class="tab" role="tab" type="button" data-v="${k}" aria-selected="${S.view===k}">${l}${c[k]!=null?`<span class="c">${int(c[k])}</span>`:''}</button>`).join('');
@@ -2141,7 +2158,6 @@ function orderCell(r){
 // last column on the Reorder and All items lists: add the item, or see what's already on the order
 function actionCell(r){
   if(r.ord>0)return `<td class="r act"><div class="on-order"><span>✓ ${qtyShort(r,r.ord)}</span><button class="x rm" type="button" data-unadd="${esc(r.key)}" aria-label="Take ${esc(r.it.name)} off your order" title="Take off your order">${ic('x')}</button></div>${r.qdId?'<div class="sub">in a QD</div>':''}</td>`;
-  if(r.child){const p=S.res.byKey.get(r.child);return `<td class="r act"><div class="act-btns"><span class="sub">Ordered as the ${p?packLabel(p.it.famN):'bigger pack'}</span>${p?`<button class="btn ghost small" type="button" data-par="${esc(r.child)}" title="Open ${esc(p.it.name)} ${esc(packLabel(p.it.famN))}">Open</button>`:''}</div></td>`}
   if(r.held)return `<td class="r act"><div class="act-btns"><span class="sub">Suppressed</span><button class="btn ghost small sup" type="button" data-unsup="${esc(r.key)}" title="Start suggesting this item again">Unsuppress</button></div></td>`;
   const u=r.units>0?r.units:stepOf(r);
   return `<td class="r act"><div class="act-btns"><button class="btn small add" type="button" data-add="${esc(r.key)}" data-u="${u}">Add ${qtyShort(r,u)}</button><button class="btn ghost small sup" type="button" data-sup="${esc(r.key)}" title="Stop suggesting this item in future orders">Suppress</button></div></td>`;
@@ -2156,7 +2172,6 @@ function bindOrderButtons(el){
   $$('[data-add]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const r=S.res.byKey.get(b.dataset.add);setOrder(b.dataset.add,+b.dataset.u);toast(`Added ${r.it.name} to your order`)});
   $$('[data-sup]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const k=b.dataset.sup,r=S.res.byKey.get(k);setSuppressed(k,true);toast(`Suppressed ${r.it.name}. It won’t be suggested again.`,{label:'Undo',fn:()=>setSuppressed(k,false)})});
   $$('[data-unsup]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const k=b.dataset.unsup,r=S.res.byKey.get(k);setSuppressed(k,false);toast(`${r.it.name} will be suggested again when it needs ordering`,{label:'Undo',fn:()=>setSuppressed(k,true)})});
-  $$('[data-par]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();openDetail(b.dataset.par)});
   $$('[data-unadd]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const r=S.res.byKey.get(b.dataset.unadd);setOrder(b.dataset.unadd,0);toast(`Took ${r.it.name} off your order`)});
   $$('[data-ostep]',el).forEach(b=>b.onclick=e=>{e.stopPropagation();const r=S.res.byKey.get(b.dataset.k);setOrder(r.key,r.ord+(+b.dataset.ostep)*stepOf(r))});
   $$('[data-oqty]',el).forEach(i=>{i.onclick=e=>e.stopPropagation();i.onchange=()=>{const r=S.res.byKey.get(i.dataset.oqty);if(i.value==='')return;setOrder(r.key,Math.max(0,Math.round(+i.value||0))*stepOf(r))}});
@@ -2224,6 +2239,15 @@ function renderView(){
     head=`<tr>${th(view,'name','Item',0,SEL_ALL)}${th(view,'vendor','Distributor')}${th(view,'cls','Rank')}${th(view,'onHand','On hand',1)}${th(view,'wk','Sells / wk',1)}${th(view,'dos','Days left',1)}${th(view,'f30','Next 30d',1)}${th(view,'f60','60d',1)}${th(view,'f90','90d',1)}${th(view,'units','Suggested',1)}${th(view,'cost','Cost',1)}${view==='reorder'?th(view,'urg','Priority'):'<th>Notes</th>'}${th(view,'ord','Your order',1)}</tr>`;
     row=x=>`<tr data-key="${esc(x.key)}"${S.sel.has(x.key)?' class="is-sel"':''}>${itemCell(x,mMeta(`${int(x.onHand)} on hand`,`${dec1(x.perWk)}/wk`,isFinite(x.dos)?`${dosTxt(x.dos)} days left`:'',x.units?money(x.cost):'',esc(x.it.vendor)),true)}<td>${esc(x.it.vendor)}</td><td><span class="abc ${x.cls}" title="${x.cls} item">${x.cls}</span></td><td class="r">${int(x.onHand)}${x.onOrder?`<div class="sub">+${int(x.onOrder)} on order</div>`:''}</td><td class="r">${dec1(x.perWk)}</td><td class="r">${dosTxt(x.dos)}</td><td class="r">${int(x.f30)}</td><td class="r">${int(x.f60)}</td><td class="r">${int(x.f90)}</td>${orderCell(x)}<td class="r">${x.units?money(x.cost):''}</td><td class="c-notes">${chips(x,['onorder','spread'])}</td>${actionCell(x)}</tr>`;
   }
+  // a family pack's smaller packs follow it, indented; clicking one opens the pack
+  const kidRow=(x,p,last)=>{
+    const nm=`<div class="kidcell"><span class="elbow" aria-hidden="true"></span><div class="cellbody"><div class="nm">${esc(packLabel(x.it.famN))}</div><div class="sub">${esc([x.it.name,x.it.sku?'#'+x.it.sku:''].filter(Boolean).join(' · '))}</div><div class="m-meta">${mMeta(`${int(x.onHand)} on hand`,`${dec1(x.perWk)}/wk`,`counts toward the ${esc(packLabel(p.it.famN))}`)}</div></div></div>`;
+    const cells=view==='dead'?`<td></td><td class="r">${int(x.onHand)}</td><td class="r">${x.lastSale!=null?fmtDayShort(x.lastSale):'never'}</td><td class="r">${dec1(x.perWk)}</td><td></td><td></td><td></td>`
+      :`<td></td><td></td><td class="r">${int(x.onHand)}</td><td class="r">${dec1(x.perWk)}</td><td colspan="7"></td><td class="r act"><span class="sub">In the ${esc(packLabel(p.it.famN))}</span></td>`;
+    return `<tr class="kid${last?' kid-last':''}" data-pkey="${esc(p.key)}" title="Part of ${esc(p.it.name)} ${esc(packLabel(p.it.famN))}"><td>${nm}</td>${cells}</tr>`;
+  };
+  const baseRow=row;
+  row=x=>x.kids?baseRow(x).replace('<tr ','<tr data-fam="1" ').replace(/^<tr ([^>]*?)(?: class="is-sel")?>/,(m,a)=>`<tr ${a} class="has-kids${S.sel.has(x.key)?' is-sel':''}">`)+x.kids.map((k,i)=>kidRow(k,x,i===x.kids.length-1)).join(''):baseRow(x);
   const emptyMsg=view==='reorder'?'Nothing needs ordering with the current filters.':view==='dead'?'No dead or overstocked items with the current filters.':'No items match.';
   const cols=view==='dead'?8:13;
   const groupHtml=qdGroups.map(g=>qdHeadRow(g,cols)+g.rs.map(row).join('')).join('');
@@ -2238,6 +2262,7 @@ function renderView(){
   bindOrderButtons(el);
   $$('th[data-sort]',el).forEach(h=>h.onclick=()=>{const k=h.dataset.sort;const cur=S.sort[view];S.sort[view]=[k,cur[0]===k?-cur[1]:(['name','vendor','cls','dos','urg','last'].includes(k)?1:-1)];renderView()});
   $$('tbody tr[data-key]',el).forEach(tr=>tr.onclick=e=>{if(e.target.closest('.selbox'))return;openDetail(tr.dataset.key)});
+  $$('tbody tr[data-pkey]',el).forEach(tr=>tr.onclick=()=>openDetail(tr.dataset.pkey));
   // tick boxes: one per row, and the header box for everything in this list (not only the rows drawn so far)
   const syncSelAll=()=>{const a=$('#selAll',el);if(!a)return;const n=listKeys.filter(k=>S.sel.has(k)).length;a.checked=n>0&&n===listKeys.length;a.indeterminate=n>0&&n<listKeys.length};
   $$('[data-sel]',el).forEach(c=>{c.onclick=e=>e.stopPropagation();c.onchange=()=>{const k=c.dataset.sel;if(c.checked)S.sel.add(k);else S.sel.delete(k);c.closest('tr').classList.toggle('is-sel',c.checked);syncSelAll();renderBulkBar()}});
@@ -2259,7 +2284,9 @@ let lastGridKey='';
 
 // the rows a list view shows, after search and filters, in the order on screen
 function viewRows(view){
-  let list=filtered();
+  if(!S.res)return [];
+  const match=itemMatcher(S.q);
+  let list=S.res.results.filter(r=>!r.child&&famPass(r,match,''));
   if(view==='reorder')list=list.filter(isSuggested);
   if(view==='dead')list=list.filter(x=>x.flags.includes('dead')||x.flags.includes('over'));
   return sortRows(list,view);
@@ -2267,7 +2294,7 @@ function viewRows(view){
 /* ---------- export what the list is showing ---------- */
 const VIEW_NAME={reorder:'reorder',all:'all-items',dead:'dead-and-overstock'};
 function exportTable(view){
-  const rows=viewRows(view),T=S.res.ctx.T;
+  const rows=viewRows(view).flatMap(x=>[x,...(x.kids||[])]),T=S.res.ctx.T;
   const r2=v=>Math.round(v*100)/100,r1=v=>Math.round(v*10)/10;
   const head=['Item #','UPC','Description','Size','Pack','Department','Distributor','Rank','On hand','On order','Sells / week','Days of supply','Next 30 days','Next 60 days','Next 90 days',
     'Suggested units','Suggested cases','Units per case','Last cost','Retail price','Margin %','Suggested cost','On your order (units)','Order cost','Last sold','Days since sale','Cash tied up','Status','Tags'];
@@ -2916,19 +2943,20 @@ function closePanel(){const o=$('#overlay');o.hidden=true;o.innerHTML=''}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#overlay').hidden)closePanel()});
 
 function openDetail(key){
-  const r=S.res&&S.res.byKey.get(key);if(!r)return;
+  let r=S.res&&S.res.byKey.get(key);if(!r)return;
+  // a smaller pack opens its family's pack, where the whole family is planned
+  if(r.child&&S.res.byKey.get(r.child)){key=r.child;r=S.res.byKey.get(key)}
   const it=r.it,ov=getOv(key),T=S.res.ctx.T;
   const plain=[r.w28&&`last 4 wks ${dec1(r.w28.r*7)}`,r.w91&&`last 13 wks ${dec1(r.w91.r*7)}`].filter(Boolean).join(', ');
   const rateLine=rateBasis(r)+(plain&&r.cleanWks?` (plain average: ${plain})`:'');
   const runOut=isFinite(r.dos)&&r.base>0?fmtDay(T+Math.floor(r.dos)):'—';
-  const par=r.child?S.res.byKey.get(r.child):null,parName=par?`${par.it.name} ${packLabel(par.it.famN)}`:'';
-  const orderTxt=r.units?(r.byCase?`${r.cases} case${r.cases===1?'':'s'} × ${r.pack} = ${int(r.units)} units`:`${int(r.units)} units`):(par?`Ordered as the ${esc(packLabel(par.it.famN))}`:r.held?'Suppressed (your setting)':r.base<=0?'No recent sales':'Nothing needed');
+  const orderTxt=r.units?(r.byCase?`${r.cases} case${r.cases===1?'':'s'} × ${r.pack} = ${int(r.units)} units`:`${int(r.units)} units`):(r.held?'Suppressed (your setting)':r.base<=0?'No recent sales':'Nothing needed');
   const famHtml=it.family?(()=>{
     const n=it.famN,lab=packLabel(n),tot=it.family.reduce((s,m)=>s+m.eq,0);
-    const row=m=>{const x=S.res.byKey.get(m.key),self=m.key===key;return `<tr><td>${self?`<b>${esc(packLabel(m.n))}</b> <span class="sub">this item</span>`:`<button class="btn ghost small" type="button" data-par="${esc(m.key)}">${esc(packLabel(m.n))}</button>`}<div class="sub">${esc(x?x.it.name:'')}${x&&x.it.sku?' · #'+esc(x.it.sku):''}</div></td><td class="r">${int(m.onHand)}</td><td class="r">${dec1(m.yr)}</td><td class="r">${dec1(m.eq)}</td></tr>`};
-    return `<div><div class="label" style="margin-bottom:6px">Pack family</div><div class="tablewrap"><table class="items plain buys"><thead><tr><th>Pack</th><th class="r">On hand</th><th class="r">Sold, last 52 wks</th><th class="r">As ${esc(lab)}s</th></tr></thead><tbody>${it.family.map(row).join('')}<tr><td><b>All packs</b></td><td class="r"><b>${int(r.onHand)}</b></td><td></td><td class="r"><b>${dec1(tot)}</b></td></tr></tbody></table></div>
-      <p class="hint" style="margin-top:6px">You order the ${esc(lab)} and break it down. The smaller packs’ sales and stock count toward it in ${esc(lab)}s, so the selling rate, stock and order here cover the whole family.${it.looseYr>0?` ${int(it.looseYr)} single${it.looseYr===1?' was':'s were'} rung up under the ${esc(lab)}’s own item number; ${it.looseYr===1?'it counts':'they count'} as ${dec1(it.looseYr/n)} ${esc(lab)}s, not ${int(it.looseYr)}.`:''}</p></div>`;
-  })():par?`<p class="hint">Made by breaking down the <button class="btn ghost small" type="button" data-par="${esc(r.child)}">${esc(parName)}</button>. This pack’s sales and stock count toward that order (one ${esc(packLabel(it.famN))} is ${dec1(it.ratio*100)}% of a ${esc(packLabel(par.it.famN))}), so it isn’t suggested on its own. The numbers below are this pack alone.</p>`:'';
+    const row=m=>{const x=S.res.byKey.get(m.key),self=m.key===key;return `<tr><td><b>${esc(packLabel(m.n))}</b>${self?' <span class="sub">ordered</span>':''}<div class="sub">${esc(x?x.it.name:'')}${x&&x.it.sku?' · #'+esc(x.it.sku):''}</div></td><td class="r">${int(m.onHand)}</td><td class="r">${dec1(m.yr)}</td><td class="r">${dec1(m.eq)}</td><td class="r">${self?'':`<label class="check" title="Bought from a distributor, not made from the ${esc(lab)}"><input type="checkbox" data-own="${esc(m.key)}" aria-label="Order the ${esc(packLabel(m.n))} on its own"></label>`}</td></tr>`};
+    return `<div><div class="label" style="margin-bottom:6px">Pack family</div><div class="tablewrap"><table class="items plain buys"><thead><tr><th>Pack</th><th class="r">On hand</th><th class="r">Sold, last 52 wks</th><th class="r">As ${esc(lab)}s</th><th class="r">Order on its own</th></tr></thead><tbody>${it.family.map(row).join('')}<tr><td><b>All packs</b></td><td class="r"><b>${int(r.onHand)}</b></td><td></td><td class="r"><b>${dec1(tot)}</b></td><td></td></tr></tbody></table></div>
+      <p class="hint" style="margin-top:6px">You order the ${esc(lab)} and break it down. The smaller packs’ sales and stock count toward it in ${esc(lab)}s, so the selling rate, stock and order here cover the whole family. Tick “Order on its own” for a smaller pack you buy from a distributor instead.${it.looseYr>0?` ${int(it.looseYr)} single${it.looseYr===1?' was':'s were'} rung up under the ${esc(lab)}’s own item number; ${it.looseYr===1?'it counts':'they count'} as ${dec1(it.looseYr/n)} ${esc(lab)}s, not ${int(it.looseYr)}.`:''}</p></div>`;
+  })():'';
   const d=openPanel(`
     <div class="drawer-head"><div><h2>${esc(it.name)}</h2><div class="sub">${esc([it.size,it.sku&&'#'+it.sku,it.upc&&'UPC '+it.upc].filter(Boolean).join(' · '))}</div></div><button class="btn ghost" data-close type="button">Close</button></div>
     <div class="row"><span class="abc ${r.cls}">${r.cls}</span><span class="hint">${esc(it.vendor)} · ${esc(it.category)}</span>${chips(r,['tags'])}</div>
@@ -2949,7 +2977,7 @@ function openDetail(key){
     ${it.cost>0?(it.costSrc==='purch'?`<p class="hint">The Item List has no cost for this item, so the cost is the average you paid ${esc(it.buys[0].vendor)}.</p>`:''):'<p class="hint">No cost for this item in the Item List file, so order totals leave it out. Add the cost in Advent and export the list again.</p>'}
     ${it.buys?`<div><div class="label" style="margin-bottom:6px">Bought from</div><div class="tablewrap"><table class="items plain buys"><thead><tr><th>Distributor</th><th class="r">Units received</th><th class="r">Avg price paid</th><th class="r">Total</th></tr></thead><tbody>${(()=>{const best=Math.min(...it.buys.filter(b=>b.avg>0).map(b=>b.avg));return it.buys.map(b=>`<tr><td>${esc(b.vendor)}${b.vendor===it.vendor?' <span class="chip acc">ordering from</span>':''}${it.buys.length>1&&b.avg>0&&b.avg===best?' <span class="chip ok">lowest price</span>':''}</td><td class="r">${int(b.qty)}</td><td class="r">${b.avg>0?money2(b.avg):'—'}${b.total>0?`<div class="sub m-only">${money2(b.total)} in all</div>`:''}</td><td class="r">${b.total>0?money2(b.total):'—'}</td></tr>`).join('')})()}</tbody></table></div>
       <p class="hint" style="margin-top:6px">From the Item Purchase By Vendor report.${it.vsrc==='purch'?' The distributor you bought the most from is used for orders; change it below.':''}${it.cost>0&&it.buys[0].avg>0&&it.costSrc!=='purch'&&Math.abs(it.buys[0].avg-it.cost)/it.cost>.1?` The average you paid (${money2(it.buys[0].avg)}) differs from the last cost by ${Math.round(Math.abs(it.buys[0].avg-it.cost)/it.cost*100)}%.`:''}</p></div>`:''}
-    <div class="row order-row">${r.ord>0?`<span class="on-order">✓ ${qtyShort(r,r.ord)} on your order${r.qdId?' (in a QD)':''}</span><button class="btn small ghost" id="dOff" type="button">Take off the order</button>`:par?`<span class="hint">Not ordered on its own. Order the ${esc(packLabel(par.it.famN))} instead.</span>`:r.held?'<span class="hint">Suppressed: won’t be suggested. Untick “Suppress” below to bring it back.</span>':`<button class="btn primary" id="dAdd" type="button">Add ${qtyShort(r,r.units>0?r.units:stepOf(r))} to your order</button>${r.units>0?'<span class="hint">the suggested amount; change it on the order sheet</span>':''}`}</div>
+    <div class="row order-row">${r.ord>0?`<span class="on-order">✓ ${qtyShort(r,r.ord)} on your order${r.qdId?' (in a QD)':''}</span><button class="btn small ghost" id="dOff" type="button">Take off the order</button>`:r.held?'<span class="hint">Suppressed: won’t be suggested. Untick “Suppress” below to bring it back.</span>':`<button class="btn primary" id="dAdd" type="button">Add ${qtyShort(r,r.units>0?r.units:stepOf(r))} to your order</button>${r.units>0?'<span class="hint">the suggested amount; change it on the order sheet</span>':''}`}</div>
     <section class="viz" aria-labelledby="vzSalesT"><div class="viz-head"><h3 class="label" id="vzSalesT">Sales per week</h3><span class="hint">Last 52 weeks and the next 13</span></div>
       <div class="legend"><span><i class="sw" style="background:var(--bar)"></i>Sold</span><span><i class="sw" style="background:var(--bar-fore)"></i>Forecast</span><span><i class="sw" style="background:var(--sunk-2)"></i>Out of stock, ignored</span><span><i class="lk"></i>Selling rate${r.base>0?` ${dec1(r.base*7)}/wk`:''}</span></div>
       <div class="chart" id="chart"></div></section>
@@ -2975,7 +3003,7 @@ function openDetail(key){
       <div class="field"><label for="ovPack">Units per case</label><input id="ovPack" type="number" min="1" step="1" value="${ov.pack??''}" placeholder="${r.pack}${r.packSrc==='est'?' (estimate)':''}"></div>
       <div class="field"><label for="ovVendor">Distributor for this item</label><input id="ovVendor" list="vendList" value="${esc(ov.vendor||'')}" placeholder="${esc(it.vendor)}"><datalist id="vendList">${[...new Set(S.res.results.map(x=>x.it.vendor).filter(v=>v!==NO_DIST))].sort().map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
       <label class="check"><input id="ovHold" type="checkbox"${ov.noReorder?' checked':''}> Suppress: don’t suggest this item again (allocated, discontinued, not carrying)</label>
-      ${par||S.agg&&S.agg.fam&&S.agg.fam.own.has(key)?`<label class="check"><input id="ovOwn" type="checkbox"${ov.ownOrder?' checked':''}> Order this pack on its own (bought from a distributor, not made from a bigger pack)</label>`:''}
+      ${S.agg&&S.agg.fam&&S.agg.fam.own.has(key)?`<label class="check"><input id="ovOwn" type="checkbox"${ov.ownOrder?' checked':''}> Order this pack on its own (bought from a distributor, not made from a bigger pack). Untick to count it toward its pack family again.</label>`:''}
     </div><p class="hint" style="margin-top:6px">Saved in this browser. Use the demand change for things the history can’t know, such as a nearby bar closing or a local event.</p></div>
     <div class="row" style="justify-content:space-between;border-top:1px solid var(--line);padding-top:12px">
       <span class="hint">${(()=>{const ds=[...qdList().map(o=>({name:o.name+' (on your order)',keys:o.items.map(i=>i.key)})),...dealsList()].filter(x=>x.keys.includes(key));return ds.length?'In '+ds.map(x=>esc(x.name)).join(', '):'Distributor running a quantity deal on this item?'})()}</span>
@@ -3005,7 +3033,11 @@ function openDetail(key){
     S.view='deals';renderTabs();renderFilters();renderView();
     $('#quick').scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>$('#qqQty')&&$('#qqQty').focus(),300);
   };
-  $$('[data-par]',d).forEach(b=>b.onclick=()=>openDetail(b.dataset.par));
+  $$('[data-own]',d).forEach(c=>c.onchange=()=>{
+    const k=c.dataset.own,x=S.res.byKey.get(k),set=on=>{const o=Object.assign({},overrides[k]||{});if(on)o.ownOrder=true;else delete o.ownOrder;overrides[k]=o;store.set('overrides',overrides);recompute()};
+    set(true);openDetail(key);
+    toast(`${x.it.name} ${packLabel(x.it.famN)} is now planned and ordered on its own`,{label:'Undo',fn:()=>{set(false);if(!$('#overlay').hidden)openDetail(key)}});
+  });
   if($('#ovOwn'))$('#ovOwn').onchange=upd;
   $('#ovOrder').onchange=upd;$('#ovAdj').onchange=upd;$('#ovHold').onchange=upd;$('#ovPack').onchange=upd;$('#ovVendor').onchange=upd;
 }
