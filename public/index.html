@@ -329,6 +329,11 @@ details.viz-table td.r,details.viz-table th.r{text-align:right;font-variant-nume
 .fact .v{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:1px}
 .controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end}
 .check{display:flex;gap:8px;align-items:center;font-size:13px}
+.famvend{background:var(--accent-soft);border-radius:var(--r-md);padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.famvend .fv-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px 12px}
+.famvend .hint{margin:0}
+.fv-list{max-height:260px;overflow:auto;display:flex;flex-direction:column;gap:2px;background:var(--surface);border-radius:var(--r-sm);padding:6px 10px}
+.fv-list .check{align-items:flex-start;padding:4px 0;cursor:pointer}.fv-group{font-size:12.5px;font-weight:600;color:var(--ink-2);padding:8px 0 2px;border-top:1px solid var(--line);margin-top:4px}.fv-list .check input{margin-top:3px;flex:none}
 .check input{width:16px;height:16px}
 .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 14px}
 .hint{font-size:12px;color:var(--muted);margin:0}
@@ -3047,7 +3052,7 @@ function openDetail(key){
   if($('#dAdd'))$('#dAdd').onclick=()=>{setOrder(key,r.units>0?r.units:stepOf(r));toast(`Added ${it.name} to your order`);openDetail(key)};
   if($('#dOff'))$('#dOff').onclick=()=>{setOrder(key,0);toast(`Took ${it.name} off your order`);openDetail(key)};
   const upd=()=>{
-    const o=Object.assign({},overrides[key]||{});
+    const o=Object.assign({},overrides[key]||{}),was=o.vendor||'';
     const oo=$('#ovOrder').value,ad=$('#ovAdj').value;
     if(oo==='')delete o.onOrder;else o.onOrder=Math.max(0,+oo);
     if(ad===''||+ad===0)delete o.adj;else o.adj=+ad;
@@ -3058,6 +3063,7 @@ function openDetail(key){
     if($('#ovOwn')){if($('#ovOwn').checked)o.ownOrder=true;else delete o.ownOrder}
     overrides[key]=o;store.set('overrides',overrides);
     recompute();openDetail(key);
+    if(vd&&vd!==was)offerFamilyVendor(key,vd);
   };
   $('#ovDeal').onclick=()=>{
     Object.assign(S.quick,{anchor:key,qty:'',days:'',extra:[],manual:{},review:{},why:{},note:''});closePanel();
@@ -3071,6 +3077,42 @@ function openDetail(key){
   });
   if($('#ovOwn'))$('#ovOwn').onchange=upd;
   $('#ovOrder').onchange=upd;$('#ovAdj').onchange=upd;$('#ovHold').onchange=upd;$('#ovPack').onchange=upd;$('#ovVendor').onchange=upd;
+}
+
+// After you pick an item's distributor: offer the same one for the rest of its brand family (every size and related
+// product in the department, as the QD check finds them). Items where you chose a different distributor start unticked.
+function offerFamilyVendor(key,vd){
+  const d=$('#overlay .drawer'),f=famInfo(key),field=$('#ovVendor');if(!d||!f||!field)return;
+  const others=f.fam.filter(r=>r.key!==key&&!r.child),todo=others.filter(r=>r.it.vendor!==vd);
+  // the same brand filed under another department (1800 Margaritas under RTD Cocktails): offered, but unticked,
+  // since a brand word alone can also match something unrelated
+  const abr=brandOf(f.a.it.name),away=S.res.results.filter(r=>!r.child&&r.it.category!==f.a.it.category&&brandOf(r.it.name)===abr&&r.it.vendor!==vd);
+  if(!todo.length&&!away.length)return;
+  const order=(a,b)=>a.it.category.localeCompare(b.it.category)||a.it.name.localeCompare(b.it.name)||sizeRank(sizeKey(a.it))-sizeRank(sizeKey(b.it));
+  todo.sort(order);away.sort(order);
+  const mine=r=>{const v=(overrides[r.key]||{}).vendor;return v&&v!==vd?v:''};
+  const brand=String(f.a.it.name).split(/\s+/)[0],same=others.length-todo.length;
+  const line=(r,on)=>`<label class="check"><input type="checkbox" data-fvk="${esc(r.key)}"${on?' checked':''}><span>${esc(r.it.name)} <span class="sub">${esc([r.it.size,r.it.pack].filter(Boolean).join(' '))}${r.it.sku?' · #'+esc(r.it.sku):''} · now ${esc(r.it.vendor)}${mine(r)?' (your pick)':''}</span></span></label>`;
+  const box=document.createElement('section');box.className='famvend';box.setAttribute('aria-label',`Use ${vd} for the ${brand} family`);
+  box.innerHTML=`<div class="fv-head"><b>Use ${esc(vd)} for the rest of the ${esc(brand)} family too?</b><span class="row"><button class="btn ghost small" type="button" data-fv="all">Select all</button><button class="btn ghost small" type="button" data-fv="none">Deselect all</button></span></div>
+    <p class="hint">Every other size and related item in ${esc(f.a.it.category)}.${same?` ${int(same)} already ${same===1?'uses':'use'} ${esc(vd)}.`:''}${todo.some(mine)?' Items where you picked a different distributor yourself start unticked.':''}</p>
+    <div class="fv-list">${todo.map(r=>line(r,!mine(r))).join('')}${away.length?`<div class="fv-group">Same brand in other departments <span class="sub">(check these belong)</span></div>${away.map(r=>line(r,false).replace('<span class="sub">',`<span class="sub">${esc(r.it.category)} · `)).join('')}`:''}</div>
+    <div class="row"><button class="btn primary small" type="button" data-fv="apply"></button><button class="btn ghost small" type="button" data-fv="skip">No thanks</button></div>`;
+  field.closest('.controls').parentElement.after(box);
+  const boxes=()=>$$('[data-fvk]',box),apply=$('[data-fv="apply"]',box);
+  const count=()=>{const n=boxes().filter(c=>c.checked).length;apply.textContent=n?`Set for ${n} item${n===1?'':'s'}`:'Set for 0 items';apply.disabled=!n};
+  boxes().forEach(c=>c.onchange=count);count();
+  $('[data-fv="all"]',box).onclick=()=>{boxes().forEach(c=>c.checked=true);count()};
+  $('[data-fv="none"]',box).onclick=()=>{boxes().forEach(c=>c.checked=false);count()};
+  $('[data-fv="skip"]',box).onclick=()=>box.remove();
+  apply.onclick=()=>{
+    const keys=boxes().filter(c=>c.checked).map(c=>c.dataset.fvk);if(!keys.length)return;
+    const before=Object.fromEntries(keys.map(k=>[k,(overrides[k]||{}).vendor]));
+    const put=fn=>{for(const k of keys){const o=Object.assign({},overrides[k]||{});fn(o,k);overrides[k]=o}store.set('overrides',overrides);recompute();if(!$('#overlay').hidden)openDetail(key)};
+    put(o=>{o.vendor=vd});
+    toast(`Set ${vd} for ${keys.length} more ${brand} item${keys.length===1?'':'s'}`,{label:'Undo',fn:()=>put((o,k)=>{if(before[k])o.vendor=before[k];else delete o.vendor})});
+  };
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
 /* ---------- charts in item details ---------- */

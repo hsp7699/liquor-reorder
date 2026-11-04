@@ -21,14 +21,14 @@ With days filled in, each item is ordered up to that many days of sales, minus w
 - **No extra safety stock.** The days are exactly what you typed. If you want a cushion, type more days.
 - **Changing the size starts the suggestion over.** If you change the QD quantity or the days after "Suggest order", the suggestion is redone. Before, the quantities stayed pinned until you pressed "Reset to suggestion".
 
-## 3. Offer to set the same distributor for the rest of an item's family
+## 3. Offer to set the same distributor for the rest of an item's family (done)
 
-When you set a distributor for one item, for example 1800 Blanco 750ml, offer to set it for the rest of the family too: the other sizes (50ml, 375ml, 1.75L) and the related items (1800 Reposado, Añejo, and so on).
+Built. When you change an item's distributor in its details, a box appears below it: "Use RNDC for the rest of the 1800 family too?"
 
-Notes for when this is built:
-- Show the offer right after the distributor is saved, listing the items it would change with a tick box for each. All are ticked by default except items that already have a different distributor you set yourself; those are shown but unticked.
-- Offer everything in the family: every size and every related product (Reposado, Añejo…), in one list with **Select all** and **Deselect all**.
-- Find the family the same way the Quantity deals check does for "sizes mix" and "flavours mix".
-- Open question: should a new size that shows up later automatically use the family's distributor?
-- One Undo for the whole change.
-- It should also work from the bulk "set distributor" action, if that gets added.
+- **What's listed:** every other item of the brand in the same department, all sizes and related products. For 1800 Blanco 750ml that's 28 items: Blanco in every size, Reposado, Coconut, Cucumber, the Margaritas and so on. Each shows its current distributor.
+- **What's ticked:** everything is ticked, except items where you already picked a different distributor yourself.
+- **Same brand in other departments** (1800 Margaritas under RTD Cocktails) is listed in its own group, unticked. Matching on the brand name alone can pull in unrelated items.
+- **Controls:** Select all, Deselect all, "Set for N items" and No thanks. One Undo puts every item back as it was.
+- **No offer** appears when the distributor didn't actually change, or when the whole family already uses it.
+- **Not built yet:** a bulk "set distributor" action. If it's added, it should use the same offer.
+- **Open question:** should a new size that shows up later automatically use the family's distributor?
