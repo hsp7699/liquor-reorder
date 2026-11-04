@@ -11,17 +11,12 @@ Notes for when this is built:
 - Say which items were unsuppressed this way when the new item list loads, with an Undo.
 - Open question: should this also happen when stock goes up from a number above zero, or only from zero?
 
-## 2. Quantity deals: order by "days to cover" instead of cases
+## 2. Quantity deals: order by "days to cover" instead of cases (done)
 
-On the Quantity deals page, add a **Days to order for** box next to the cases box. You fill in one or the other, never both: typing in one clears and disables the other.
+Built. On the Quantity deals page, a **days to order for** box sits next to the QD quantity. Only one of the two is ever filled in: typing in one empties the other.
 
-When days are filled in, "Suggest order" picks quantities so each item has enough stock to last that many days. For example, at 60 days the target is about 60 days of sales minus what's on hand and on order, rounded to whole cases. The total cases then come from the suggestion, not from a number you typed.
+With days filled in, each item is ordered up to that many days of sales, minus what's on hand and on order. Quantities are in whole cases, rounded up the same way as the Reorder list. The summary, the total line and the QD heading on the Reorder list all say how many days the order is for. "Change" brings the days back.
 
-Notes for when this is built:
-- Slow sellers that are almost out still get 1 case. If an item still sells and has 2 or fewer on hand, add at least 1 case even when the days math rounds down to 0. For example, 2 bottles on hand, selling 1 a month, with 80 days asked for.
-- Show next to each line how many days the suggested quantity covers, so you can check it.
-- Show whether the total reaches the deal's case count, and how far short it is.
-- Decided:
-  - The minimum is one case, not one unit.
-  - "Almost out" is judged by on hand: 2 or fewer.
-  - The days are exactly what you typed, with no extra safety stock. A deal already makes you buy ahead, and you pick the days yourself, so adding safety stock on top would over-buy. If you want a cushion, type more days.
+- **Nearly-out items get at least one case.** This applies to items with 2 or fewer on hand that will sell at least one more in those days, even when the days only call for part of a case. Your example still gets one: 2 on hand, selling 1 a month, 80 days asked for. Something that sells once a year doesn't get one.
+- **No extra safety stock.** The days are exactly what you typed. If you want a cushion, type more days.
+- **Changing the size starts the suggestion over.** If you change the QD quantity or the days after "Suggest order", the suggestion is redone. Before, the quantities stayed pinned until you pressed "Reset to suggestion".

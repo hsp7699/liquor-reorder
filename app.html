@@ -2407,16 +2407,17 @@ const qtyTxt=(r,u)=>!u?'—':r.byCase?`${int(u/r.pack)} cs <span class="sub">(${
 // the sample store opens on a worked example; real data starts blank
 function resetQuick(){
   if(S.quick.busy)S.quick.busy.abort();
-  Object.assign(S.quick,{anchor:'',qty:'',countIn:'case',mixSizes:false,mixFlavors:false,sizeSel:null,flavSel:null,disc:'',extra:[],manual:{},review:{},why:{},note:'',busy:null});
+  Object.assign(S.quick,{anchor:'',qty:'',days:'',countIn:'case',mixSizes:false,mixFlavors:false,sizeSel:null,flavSel:null,disc:'',extra:[],manual:{},review:{},why:{},note:'',busy:null});
   if(S.sample&&SAMPLE_DEALS[0])Object.assign(S.quick,{anchor:SAMPLE_DEALS[0].anchor,qty:'10',mixSizes:true});
 }
 function quickLabel(r){return r?[r.it.name,r.it.size,r.it.pack].filter(Boolean).join(' '):''}
 function renderQuickShell(){
   const q=S.quick,a=q.anchor&&S.res.byKey.get(q.anchor);
-  return `<section class="sheet" id="quick"><div class="sheet-head"><div><h3>Quick QD check</h3><div class="sheet-meta"><span>Pick an item and enter the QD quantity. The planner suggests how many of each to order; change any of them, then add the whole QD to your order.</span></div></div><button class="btn ghost small" id="qqClear" type="button"${q.anchor||q.qty||q.extra.length||q.disc?'':' hidden'}>Clear selection</button></div>
+  return `<section class="sheet" id="quick"><div class="sheet-head"><div><h3>Quick QD check</h3><div class="sheet-meta"><span>Pick an item and enter the QD quantity, or how many days the order should last. The planner suggests how many of each to order; change any of them, then add the whole QD to your order.</span></div></div><button class="btn ghost small" id="qqClear" type="button"${q.anchor||q.qty||q.days||q.extra.length||q.disc?'':' hidden'}>Clear selection</button></div>
     <div class="quick-form">
       <div class="field qf-item"><label for="qqItem">Item</label><input id="qqItem" type="search" autocomplete="off" placeholder="Search, e.g. Hennessy VS" value="${esc(quickLabel(a))}"><div class="results" id="qqRes" hidden></div></div>
       <div class="field"><label for="qqQty">QD quantity</label><input id="qqQty" type="number" min="1" step="1" inputmode="numeric" value="${esc(q.qty)}" placeholder="e.g. 10"></div>
+      <div class="field"><label for="qqDays">or days to order for</label><input id="qqDays" type="number" min="1" max="730" step="1" inputmode="numeric" value="${esc(q.days)}" placeholder="e.g. 60" title="Order enough of each item to last this many days. Fill in this or the QD quantity, not both."></div>
       <div class="field"><label for="qqUnit">Counted in</label><select id="qqUnit"><option value="case"${q.countIn==='case'?' selected':''}>Cases</option><option value="unit"${q.countIn==='unit'?' selected':''}>Bottles</option></select></div>
       <div class="qf-checks">
         <div class="mixctl"><label class="check"><input id="qqSizes" type="checkbox"${q.mixSizes?' checked':''}> <span id="qqSizesL">Sizes mix</span></label><button class="caret" id="qqSizesDD" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Pick which sizes mix">${ic('down',12)}</button><div class="mixpop" id="qqSizesPop" hidden></div></div>
@@ -2441,7 +2442,11 @@ function bindQuick(){
   const q=S.quick;
   const inp=$('#qqItem');
   bindItemSearch(inp,$('#qqRes'),k=>{q.anchor=k;q.extra=[];q.manual={};q.mixSizes=false;q.mixFlavors=false;q.sizeSel=null;q.flavSel=null;closeMixPops();q.review={};q.why={};q.note='';inp.value=quickLabel(S.res.byKey.get(k));renderQuickOut()});
-  $('#qqQty').oninput=e=>{q.qty=e.target.value;refreshQuick()};
+  // a QD is sized either by its quantity or by days of stock: typing in one empties the other
+  // after "Suggest order" every quantity is pinned, so a new size starts the suggestion over
+  const resized=()=>{if(q.note&&!q.busy){q.manual={};q.review={};q.why={};q.note='';renderQuickOut()}else refreshQuick()};
+  $('#qqQty').oninput=e=>{q.qty=e.target.value;if(q.qty!==''&&q.days!==''){q.days='';$('#qqDays').value=''}resized()};
+  $('#qqDays').oninput=e=>{q.days=e.target.value;if(q.days!==''&&q.qty!==''){q.qty='';$('#qqQty').value=''}resized()};
   $('#qqDisc').oninput=e=>{q.disc=e.target.value;refreshQuick()};
   $('#qqUnit').onchange=e=>{q.countIn=e.target.value;$('#qqDiscL').textContent=`Discount per ${q.countIn==='case'?'case':'bottle'} (optional)`;renderQuickOut()};
   // the checkbox mixes everything; the ▾ list picks only some
@@ -2456,7 +2461,7 @@ function bindQuick(){
 // start the quick check over: no item, quantity, added items, typed amounts or mix choices
 function clearQuick(){
   if(S.quick.busy)S.quick.busy.abort();
-  Object.assign(S.quick,{anchor:'',qty:'',mixSizes:false,mixFlavors:false,sizeSel:null,flavSel:null,disc:'',extra:[],manual:{},review:{},why:{},note:'',busy:null});
+  Object.assign(S.quick,{anchor:'',qty:'',days:'',mixSizes:false,mixFlavors:false,sizeSel:null,flavSel:null,disc:'',extra:[],manual:{},review:{},why:{},note:'',busy:null});
   closeMixPops();renderView();
   const i=$('#qqItem');if(i)i.focus();
 }
@@ -2530,19 +2535,36 @@ function quickModel(){
   const rows=dealRows(fam).sort((x,y)=>y.r.perWk-x.r.perWk);
   const cnt=(x,u)=>q.countIn==='case'?u/x.r.pack:u;
   rows.forEach(x=>{x.normal=x.base;const m=q.manual[x.r.key];if(m!=null){x.base=m;x.locked=true}});
-  const qty=+q.qty;
-  const units=qty>0?fillRows(rows,qty,q.countIn,Infinity).units:rows.map(x=>x.base);
+  const qty=+q.qty,days=!(qty>0)&&+q.days>0?Math.min(730,Math.round(+q.days)):0;
+  const units=days?rows.map(x=>x.locked?x.base:daysUnits(x,days)):qty>0?fillRows(rows,qty,q.countIn,Infinity).units:rows.map(x=>x.base);
   const total=rows.reduce((s,x,i)=>s+cnt(x,units[i]),0),normalTotal=rows.reduce((s,x)=>s+cnt(x,x.normal),0);
   let extraCash=0,carry=0;
   rows.forEach((x,i)=>{const e=units[i]-x.normal;extraCash+=Math.max(0,e)*x.cost;carry+=holdingCost(Object.assign({},x,{base:x.normal}),e)});
   const disc=+q.disc>0?+q.disc:0;
-  return {q,a,auto,fam,rows,units,total,normalTotal,qty,extraCash,carry,disc,save:disc*total,uw:q.countIn==='case'?'case':'bottle'};
+  return {q,a,auto,fam,rows,units,total,normalTotal,qty,days,extraCash,carry,disc,save:disc*total,uw:q.countIn==='case'?'case':'bottle'};
+}
+// enough to last `days`: the days' sales less what's on hand and on order, in whole order steps (rounded up the same way
+// as the Reorder list). A nearly-out item (2 or fewer on hand) that will sell at least one more in those days gets
+// one case even when its sales are too slow for the days to call for a full one. Items that haven't sold get nothing.
+function daysUnits(x,days){
+  x.minCase=false;
+  if(!(x.rate>0))return 0;
+  const st=x.step,need=x.rate*days-x.pos;
+  let n=0;
+  if(need>0){n=Math.floor(need/st);const rest=(need-n*st)/st;if(rest>1e-9&&(st===1||rest>=(+settings.roundUp||0)/100))n++}
+  if(n===0&&x.r.onHand<=2&&x.rate*days>=1){n=1;x.minCase=true}
+  return n*st;
 }
 function quickSummary(m){
   const {rows,units,total,normalTotal,qty,uw,disc,save,carry,extraCash}=m;
   let s;
   if(!rows.length)s='<div class="rec skip"><b>No items to order.</b><span>Add an item below.</span></div>';
-  else if(!(qty>0))s=`<div class="rec skip"><b>Enter the QD quantity.</b><span>Your normal order for these items is ${countTxt(normalTotal,uw)}. You can also set each quantity yourself below.</span></div>`;
+  else if(m.days){
+    const cost=rows.reduce((t,x,i)=>t+units[i]*x.cost,0),more=total-normalTotal;
+    const mins=rows.filter((x,i)=>x.minCase&&!x.locked&&units[i]>0).length,none=rows.filter(x=>!(x.rate>0)&&!x.locked).length;
+    s=`<div class="rec good"><b>Order ${countTxt(total,uw)} to last ${int(m.days)} days.</b><span>${money(cost)} at cost${more>0?`, ${countTxt(more,uw)} more than your normal order`:''}${disc?`. The discount saves about ${money(save)}`:''}.${mins?` ${mins} nearly-out item${mins===1?' gets':'s get'} one ${rows.some(x=>x.minCase&&x.r.byCase)?'case':'order'} even though ${int(m.days)} days only calls for part of one.`:''}${none?` ${none} item${none===1?' hasn’t':'s haven’t'} sold recently, so ${none===1?'it gets':'they get'} nothing unless you add some.`:''}</span></div>`;
+  }
+  else if(!(qty>0))s=`<div class="rec skip"><b>Enter the QD quantity, or how many days the order should last.</b><span>Your normal order for these items is ${countTxt(normalTotal,uw)}. You can also set each quantity yourself below.</span></div>`;
   else if(total+1e-9<qty)s=`<div class="rec bad"><b>${countTxt(qty-total,uw)} short of the QD.</b><span>You have ${countTxt(total,uw)} of ${countTxt(qty,uw)}. ${rows.some(x=>x.rate>0&&!x.locked)?'':'None of the items you haven’t set have sold recently, so the planner won’t add to them. '}Raise a quantity below to reach the QD.</span></div>`;
   else if(normalTotal>=qty&&extraCash<=0)s=`<div class="rec good"><b>Your normal order (${countTxt(normalTotal,uw)}) already covers this QD.</b><span>No extra stock needed.${disc?` The discount saves about ${money(save)}.`:''}</span></div>`;
   else{
@@ -2556,8 +2578,8 @@ function quickSummary(m){
 }
 const stepOf=r=>r.byCase?r.pack:1;
 const daysTxt=(x,u)=>x.rate>0?`${int((x.pos+u)/x.rate)}${(x.pos+u)/x.rate>120?' <span class="chip warn">long</span>':''}`:'—';
-const totalTxt=m=>m.qty>0?`Total ${countTxt(m.total,m.uw)} of ${countTxt(m.qty,m.uw)}`:`Total ${countTxt(m.total,m.uw)}`;
-const syncClear=()=>{const b=$('#qqClear'),q=S.quick;if(b)b.hidden=!(q.anchor||q.qty||q.extra.length||q.disc)};
+const totalTxt=m=>m.qty>0?`Total ${countTxt(m.total,m.uw)} of ${countTxt(m.qty,m.uw)}`:m.days?`Total ${countTxt(m.total,m.uw)} for ${int(m.days)} days`:`Total ${countTxt(m.total,m.uw)}`;
+const syncClear=()=>{const b=$('#qqClear'),q=S.quick;if(b)b.hidden=!(q.anchor||q.qty||q.days||q.extra.length||q.disc)};
 function renderQuickOut(){
   const q=S.quick,el=$('#qqOut');if(!el)return;
   syncClear();
@@ -2573,7 +2595,7 @@ function renderQuickOut(){
   }).join('');
   el.innerHTML=`<div id="qqSum">${quickSummary(m)}</div><div id="qqNote">${suggestNote()}</div><div class="tablewrap" style="box-shadow:none;border-top:1px solid var(--line);border-radius:0"><table class="items plain list"><thead><tr><th>Item</th><th class="r">Sells / wk</th><th class="r">On hand</th><th class="r">Normal order</th><th class="r">Order</th><th class="r">Days of supply after</th></tr></thead><tbody>${body}</tbody></table></div>
     <div class="qf-add"><div class="field"><label for="qqAdd">Add another item to this QD</label><input id="qqAdd" type="search" autocomplete="off" placeholder="e.g. Bacardi Gold 375"></div><div class="results" id="qqAddRes" hidden></div></div>
-    <div class="qq-bar"><div><b id="qqTot">${totalTxt(m)}</b><div class="hint">Change any quantity with − and +; the others adjust to keep the QD total. <button class="btn ghost small" id="qqReset" type="button"${anyManual?'':' hidden'}>Reset to suggestion</button></div></div>
+    <div class="qq-bar"><div><b id="qqTot">${totalTxt(m)}</b><div class="hint">${m.days?'Change any quantity with − and +; the others keep their days of stock.':'Change any quantity with − and +; the others adjust to keep the QD total.'} <button class="btn ghost small" id="qqReset" type="button"${anyManual?'':' hidden'}>Reset to suggestion</button></div></div>
       <div class="row"><button class="btn small ghost" id="qqSave" type="button">Save as a deal…</button>${q.busy?'<button class="btn" id="qqStop" type="button">Stop</button>':''}<button class="btn" id="qqSuggest" type="button"${q.busy?' disabled':''}>${q.busy?'Suggesting…':'Suggest order'}</button><button class="btn primary" id="qqOrder" type="button">Add to order</button></div></div>
     ${onOrder?`<div class="qq-onorder">${onOrder} QD${onOrder===1?' is':'s are'} on your order. <button class="btn ghost small" id="qqGo" type="button">View on the Reorder list</button></div>`:''}`;
   // −/+ and typed quantities only refresh the numbers, so focus and clicks are never lost
@@ -2603,7 +2625,7 @@ function renderQuickOut(){
     if(!items.length){toast('Set at least one quantity first');return}
     if(pendingReview(mm).length)return;
     const list=qdList(),i=list.findIndex(o=>o.anchor===q.anchor);
-    const o={id:i>=0?list[i].id:'q'+Date.now().toString(36),name:`${quickLabel(mm.a)} QD`,anchor:q.anchor,qty:mm.qty||0,countIn:q.countIn,disc:mm.disc,items,added:todayDay()};
+    const o={id:i>=0?list[i].id:'q'+Date.now().toString(36),name:`${quickLabel(mm.a)} QD`,anchor:q.anchor,qty:mm.qty||0,days:mm.days||0,countIn:q.countIn,disc:mm.disc,items,added:todayDay()};
     if(i>=0)list[i]=o;else list.push(o);
     saveQd();refreshOrders();
     toast(`${i>=0?'Updated':'Added to order'}: ${countTxt(mm.total,mm.uw)} across ${items.length} item${items.length===1?'':'s'}`);
@@ -2676,15 +2698,15 @@ async function suggestOrder(){
   }).join('\n');
   const prompt=`You are helping a liquor store owner fill a distributor quantity deal (QD) order.
 
-QD: ${m.qty>0?`buy at least ${m.qty} ${uw}s in total`:'no minimum entered'} across the items below, which the owner picked as "${quickLabel(m.a)}"${q.mixSizes?' with sizes mixing':''}${q.mixFlavors?' with flavours mixing':''}. ${m.disc?`Discount: $${m.disc} per ${uw}.`:''}
-Today is in ${mon}. The planner split the QD so each item lasts about the same number of days, based on recent sales.
+QD: ${m.qty>0?`buy at least ${m.qty} ${uw}s in total`:m.days?`no case minimum; the owner wants enough of each item to last ${m.days} days`:'no minimum entered'} across the items below, which the owner picked as "${quickLabel(m.a)}"${q.mixSizes?' with sizes mixing':''}${q.mixFlavors?' with flavours mixing':''}. ${m.disc?`Discount: $${m.disc} per ${uw}.`:''}
+Today is in ${mon}. ${m.days?`The planner ordered each item up to ${m.days} days of stock at its recent selling rate (no extra safety stock), and gave items that still sell but have 2 or fewer on hand at least one case.`:'The planner split the QD so each item lasts about the same number of days, based on recent sales.'}
 
 Items (id | name | size/pack | department | sales | on hand | cost | order unit | how it counts toward the QD | normal order | planner suggestion):
 ${lines}
 
 Your job:
 - Start from the planner's suggestion. Change an item only for a concrete reason a store owner would agree with: the season (e.g. summer flavours in ${mon}), the item looks discontinued or not part of this deal (a different product line, size or type than the rest), or the sales/stock data looks wrong.
-- Quantities are whole order units (cases where the order unit is a case). Keep the total, counted as described, at or above the QD minimum, and don't go far above it.
+- Quantities are whole order units (cases where the order unit is a case). ${m.days?`Aim for about ${m.days} days of stock per item; don't add safety stock beyond that.`:'Keep the total, counted as described, at or above the QD minimum, and don’t go far above it.'}
 - Set review to true for every item you are unsure about or whose data looks off, with one short plain sentence saying what to check. Items with a "planner check" note should be review true unless you are confident the note doesn't matter.
 - Don't invent facts about sales you weren't given.
 
@@ -2721,7 +2743,7 @@ Reply with only JSON: {"items":[{"id":"i1","qty":2,"review":false,"reason":"shor
 function qdHeadRow(g,cols){
   const {o,p}=g,uw=o.countIn==='case'?'case':'bottle',cost=p.items.reduce((s,i)=>s+i.units*i.r.it.cost,0);
   const short=+o.qty>0&&p.total+1e-9<+o.qty;
-  return `<tr class="qd-head"><td colspan="${cols}"><div class="qd-bar"><div><b>${esc(o.name)}</b><span class="sub"> · ${countTxt(p.total,uw)}${+o.qty>0?` (QD ${countTxt(+o.qty,uw)})`:''}${o.disc?` · ${money2(+o.disc)} off per ${uw}`:''} · ${money(cost)} at cost</span>${short?' <span class="chip warn">Short of the QD</span>':''}${p.blockedBy?` <span class="chip warn">Shares items with ${p.blockedBy.map(esc).join(', ')}; not applied</span>`:''}</div>
+  return `<tr class="qd-head"><td colspan="${cols}"><div class="qd-bar"><div><b>${esc(o.name)}</b><span class="sub"> · ${countTxt(p.total,uw)}${+o.qty>0?` (QD ${countTxt(+o.qty,uw)})`:+o.days>0?` (to last ${int(+o.days)} days)`:''}${o.disc?` · ${money2(+o.disc)} off per ${uw}`:''} · ${money(cost)} at cost</span>${short?' <span class="chip warn">Short of the QD</span>':''}${p.blockedBy?` <span class="chip warn">Shares items with ${p.blockedBy.map(esc).join(', ')}; not applied</span>`:''}</div>
     <div class="row"><button class="btn small" type="button" data-qdedit="${esc(o.id)}">Change</button><button class="btn small ghost" type="button" data-qdrm="${esc(o.id)}">Remove</button></div></div></td></tr>`;
 }
 function bindQdButtons(el){
@@ -2734,7 +2756,7 @@ function bindQdButtons(el){
     e.stopPropagation();
     const o=qdList().find(x=>x.id===b.dataset.qdedit);if(!o)return;
     const auto=suggestFamily(o.anchor,false,false);
-    Object.assign(S.quick,{anchor:o.anchor,qty:o.qty?String(o.qty):'',countIn:o.countIn,mixSizes:false,mixFlavors:false,sizeSel:null,flavSel:null,disc:o.disc?String(o.disc):'',
+    Object.assign(S.quick,{anchor:o.anchor,qty:o.qty?String(o.qty):'',days:o.days?String(o.days):'',countIn:o.countIn,mixSizes:false,mixFlavors:false,sizeSel:null,flavSel:null,disc:o.disc?String(o.disc):'',
       extra:o.items.map(i=>i.key).filter(k=>!auto.includes(k)),manual:Object.fromEntries(o.items.map(i=>[i.key,i.units])),review:{},why:{},note:''});
     S.view='deals';renderTabs();renderFilters();renderView();$('#quick').scrollIntoView({behavior:'smooth',block:'start'});
   });
@@ -3029,7 +3051,7 @@ function openDetail(key){
     recompute();openDetail(key);
   };
   $('#ovDeal').onclick=()=>{
-    Object.assign(S.quick,{anchor:key,qty:'',extra:[],manual:{},review:{},why:{},note:''});closePanel();
+    Object.assign(S.quick,{anchor:key,qty:'',days:'',extra:[],manual:{},review:{},why:{},note:''});closePanel();
     S.view='deals';renderTabs();renderFilters();renderView();
     $('#quick').scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>$('#qqQty')&&$('#qqQty').focus(),300);
   };
@@ -3327,7 +3349,7 @@ function howHtml(){
     <p><b>On your Cloudflare site</b> (when the top right says “Shared storage”), uploaded files, your order, QDs, saved deals and settings are saved to your own Cloudflare storage behind your Access sign-in, so every computer you sign in on sees the same thing.</p>
     <p><b>Anywhere else</b>, files are read inside this browser tab and are not uploaded anywhere; everything is saved in this browser on this computer only. Keep your exports either way.</p></section>
   <section><h3>Quantity deals</h3>
-    <p><b>Quick QD check:</b> pick the item, type the QD quantity and tick whether sizes and flavours mix. The split updates as you type and nothing is saved. Add the discount to see whether the extra stock is worth it.</p>
+    <p><b>Quick QD check:</b> pick the item, type the QD quantity and tick whether sizes and flavours mix. The split updates as you type and nothing is saved. Add the discount to see whether the extra stock is worth it. Instead of a QD quantity you can type how many days the order should last: each item is ordered up to that many days of sales (no extra safety stock), and an item with 2 or fewer on hand that will sell at least one more in that time gets at least one case.</p>
     <p><b>Saved deals</b> keep a deal for the month, compare several tiers and feed the Reorder list. Pick the item, tick whether sizes and flavours mix, and enter each tier. For every tier the planner starts from your normal order and adds one case at a time to whichever item would run out first, so the extra stock is spread by how fast each item sells. It won’t push any item past the days-of-supply limit you set.</p>
     <p>It then compares the discount with the cost of carrying the extra stock (the holding cost in Settings, 20% a year by default, covers tied-up cash, space and breakage) and recommends the tier that leaves you furthest ahead, or skipping the deal.</p></section>
   <section><h3>Case sizes</h3>
