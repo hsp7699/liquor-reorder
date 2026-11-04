@@ -27,6 +27,8 @@ When you set a distributor for one item, for example 1800 Blanco 750ml, offer to
 
 Notes for when this is built:
 - Show the offer right after the distributor is saved, listing the items it would change with a tick box for each. All are ticked by default except items that already have a different distributor you set yourself; those are shown but unticked.
-- Find the family the same way the Quantity deals check does for "sizes mix" and "flavours mix": same brand, any size, plus related names. Sizes ("other sizes") and related products ("Reposado, Añejo…") could be two groups you tick separately.
+- Offer everything in the family: every size and every related product (Reposado, Añejo…), in one list with **Select all** and **Deselect all**.
+- Find the family the same way the Quantity deals check does for "sizes mix" and "flavours mix".
+- Open question: should a new size that shows up later automatically use the family's distributor?
 - One Undo for the whole change.
 - It should also work from the bulk "set distributor" action, if that gets added.
