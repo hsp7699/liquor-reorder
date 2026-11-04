@@ -20,3 +20,13 @@ With days filled in, each item is ordered up to that many days of sales, minus w
 - **Nearly-out items get at least one case.** This applies to items with 2 or fewer on hand that will sell at least one more in those days, even when the days only call for part of a case. Your example still gets one: 2 on hand, selling 1 a month, 80 days asked for. Something that sells once a year doesn't get one.
 - **No extra safety stock.** The days are exactly what you typed. If you want a cushion, type more days.
 - **Changing the size starts the suggestion over.** If you change the QD quantity or the days after "Suggest order", the suggestion is redone. Before, the quantities stayed pinned until you pressed "Reset to suggestion".
+
+## 3. Offer to set the same distributor for the rest of an item's family
+
+When you set a distributor for one item, for example 1800 Blanco 750ml, offer to set it for the rest of the family too: the other sizes (50ml, 375ml, 1.75L) and the related items (1800 Reposado, Añejo, and so on).
+
+Notes for when this is built:
+- Show the offer right after the distributor is saved, listing the items it would change with a tick box for each. All are ticked by default except items that already have a different distributor you set yourself; those are shown but unticked.
+- Find the family the same way the Quantity deals check does for "sizes mix" and "flavours mix": same brand, any size, plus related names. Sizes ("other sizes") and related products ("Reposado, Añejo…") could be two groups you tick separately.
+- One Undo for the whole change.
+- It should also work from the bulk "set distributor" action, if that gets added.
