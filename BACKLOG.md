@@ -32,3 +32,13 @@ Built. When you change an item's distributor in its details, a box appears below
 - **No offer** appears when the distributor didn't actually change, or when the whole family already uses it.
 - **Not built yet:** a bulk "set distributor" action. If it's added, it should use the same offer.
 - **Open question:** should a new size that shows up later automatically use the family's distributor?
+
+## 4. Suppress button on the Quantity deals page
+
+Each item line in the Quick QD check gets a **Suppress** button, the same as on the Reorder list.
+
+Notes for when this is built:
+- Suppressing an item drops it from the deal straight away, and the rest of the QD is split again without it. Suppressed items are already left out of QDs today, but only if you suppress them somewhere else first.
+- A toast with Undo brings it back into the deal.
+- Under the list, show a small "N suppressed items left out" line with a way to see them and bring one back. Otherwise a flavour can quietly go missing from the deal.
+- It's the same suppress as everywhere else (shared, saved with the item), so the item also stops being suggested on the Reorder list.
