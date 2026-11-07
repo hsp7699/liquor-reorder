@@ -644,6 +644,19 @@ const ICONS={tag:'<path d="M2.5 8.6V3.2c0-.4.3-.7.7-.7h5.4l4.9 4.9a1 1 0 0 1 0 1
 const ic=(n,size=14)=>`<svg class="ic" viewBox="0 0 16 16" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
 const qtyShort=(r,u)=>r.byCase?`${int(u/r.pack)} cs`:`${int(u)} unit${u===1?'':'s'}`;
 const samplerP=(window.claude&&window.claude.use)?window.claude.use('sample').catch(()=>null):Promise.resolve(null);
+// Distributors are only ever picked, never typed: the ones named in your distributor file (Item Purchase By Vendor)
+// and item list. An older choice that isn't in the files is kept as an option, so opening a picker never changes it.
+function distributorList(){
+  const s=new Set();
+  if(S.purch)for(const r of S.purch.rows)s.add(r.vendor);
+  if(S.inv)for(const it of S.inv.items)if(it.vendor)s.add(it.vendor);
+  s.delete('');s.delete(NO_DIST);
+  return [...s].sort((a,b)=>a.localeCompare(b));
+}
+function vendorOptions(cur,blank){
+  const list=distributorList();
+  return `<option value="">${esc(blank)}</option>`+(cur&&!list.includes(cur)?`<option value="${esc(cur)}" selected>${esc(cur)} (not in your files)</option>`:'')+list.map(v=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(v)}</option>`).join('');
+}
 const deptOf=d=>Object.assign({vendor:'',skip:/^(misc fee|fees?)$/i.test(d)},deptCfg[d]||{});
 
 /* loaded files are kept in this browser (IndexedDB) so weekly updates only need the newest week */
@@ -1428,7 +1441,7 @@ function compute(){
     const vsrc=ov.vendor?'you':it.vendor?'file':pv?'purch':dc.vendor?'dept':'';
     // no cost in the item list: use the average price paid to the main distributor
     const pc=!(it.cost>0)&&buys&&buys[0].avg>0?buys[0].avg:0;
-    return Object.assign({},it,{buys,vsrc,cost:pc||it.cost,costSrc:pc?'purch':'file',vendor:ov.vendor||it.vendor||pv||dc.vendor||NO_DIST,skip:dc.skip,sArr:st?st.sArr:null,rev:st?st.rev:0,firstSale:st?st.firstSale:null,lastSale:st?st.lastSale:null,spread:st?st.spread:false});
+    return Object.assign({},it,{buys,vsrc,cost:pc||it.cost,costSrc:pc?'purch':'file',vendor:ov.vendor||it.vendor||pv||dc.vendor||NO_DIST,autoVendor:it.vendor||pv||dc.vendor||NO_DIST,skip:dc.skip,sArr:st?st.sArr:null,rev:st?st.rev:0,firstSale:st?st.firstSale:null,lastSale:st?st.lastSale:null,spread:st?st.spread:false});
   });
   // a family's pack holds its children's stock too, in part-packs: two 18pks and three loose 6pks are three 18pks.
   // A break-down Advent never recorded cancels out the same way (the 18pk count stays high, the 6pks go negative).
@@ -2840,7 +2853,6 @@ function openDealEditor(init){
     // show the selected items plus the rest of the brand family so they are easy to tick
     let cands=[];
     if(a){const fam=new Set([...draft.keys,...suggestFamily(draft.anchor,true,true)]);cands=[...fam].map(k=>S.res.byKey.get(k)).filter(Boolean).sort((x,y)=>(draft.keys.includes(y.key)-draft.keys.includes(x.key))||(y.perWk-x.perWk))}
-    const vendors=[...new Set(S.res.results.map(x=>x.it.vendor).filter(v=>v!==NO_DIST))].sort();
     const d=openPanel(`
       <div class="drawer-head"><h2>${existing?'Edit quantity deal':'New quantity deal'}</h2><button class="btn ghost" data-close type="button">Cancel</button></div>
       <div><div class="label" style="margin-bottom:6px">Deal item</div>
@@ -2877,7 +2889,7 @@ function openDealEditor(init){
       </div>
       <div class="settings-grid">
         <div class="field"><label for="dqName">Deal name</label><input id="dqName" value="${esc(draft.name)}"></div>
-        <div class="field"><label for="dqVendor">Distributor</label><input id="dqVendor" list="dqVendList" value="${esc(draft.vendor)}"><datalist id="dqVendList">${vendors.map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+        <div class="field"><label for="dqVendor">Distributor</label><select id="dqVendor">${vendorOptions(draft.vendor||'','Not set')}</select></div>
       </div>`:''}
       <div class="err" id="dqErr" role="alert"></div>
       <div class="row"><button class="btn primary" id="dqSave" type="button"${a?'':' disabled'}>Save deal</button><button class="btn ghost" data-close type="button">Cancel</button></div>
@@ -2902,7 +2914,7 @@ function openDealEditor(init){
     $('#dqCount').onchange=e=>{draft.countIn=e.target.value;render()};
     $('#dqMax').onchange=e=>{draft.maxDays=Math.max(7,+e.target.value||90)};
     $('#dqFrom').onchange=e=>{draft.from=e.target.value};$('#dqTo').onchange=e=>{draft.to=e.target.value};
-    $('#dqName').onchange=e=>{draft.name=e.target.value};$('#dqVendor').onchange=e=>{draft.vendor=e.target.value.trim()};
+    $('#dqName').onchange=e=>{draft.name=e.target.value};$('#dqVendor').onchange=e=>{draft.vendor=e.target.value};
     $('#dqText').onchange=e=>{draft._text=e.target.value};
     samplerP.then(s=>{const box=$('#dqClaude');if(s&&box)box.hidden=false});
     $('#dqAsk').onclick=()=>{if(!busy){draft._text=$('#dqText').value;askClaude()}};
@@ -3037,7 +3049,7 @@ function openDetail(key){
       <div class="field"><label for="ovOrder">Already on order (units)</label><input id="ovOrder" type="number" min="0" step="1" value="${ov.onOrder??''}" placeholder="${it.onOrder||0}"></div>
       <div class="field"><label for="ovAdj">Expected demand change (%)</label><input id="ovAdj" type="number" step="5" value="${ov.adj||''}" placeholder="0"></div>
       <div class="field"><label for="ovPack">Units per case</label><input id="ovPack" type="number" min="1" step="1" value="${ov.pack??''}" placeholder="${r.pack}${r.packSrc==='est'?' (estimate)':''}"></div>
-      <div class="field"><label for="ovVendor">Distributor for this item</label><input id="ovVendor" list="vendList" value="${esc(ov.vendor||'')}" placeholder="${esc(it.vendor)}"><datalist id="vendList">${[...new Set(S.res.results.map(x=>x.it.vendor).filter(v=>v!==NO_DIST))].sort().map(v=>`<option value="${esc(v)}">`).join('')}</datalist></div>
+      <div class="field"><label for="ovVendor">Distributor for this item</label><select id="ovVendor">${vendorOptions(ov.vendor||'',`Automatic: ${it.autoVendor}`)}</select>${distributorList().length?'':'<div class="sub">Load the Item Purchase By Vendor report under Distributors to pick from your distributors.</div>'}</div>
       <label class="check"><input id="ovHold" type="checkbox"${ov.noReorder?' checked':''}> Suppress: don’t suggest this item again (allocated, discontinued, not carrying)</label>
       ${S.agg&&S.agg.fam&&S.agg.fam.own.has(key)?`<label class="check"><input id="ovOwn" type="checkbox"${ov.ownOrder?' checked':''}> Order this pack on its own (bought from a distributor, not made from a bigger pack). Untick to count it toward its pack family again.</label>`:''}
     </div><p class="hint" style="margin-top:6px">Saved in this browser. Use the demand change for things the history can’t know, such as a nearby bar closing or a local event.</p></div>
@@ -3298,9 +3310,8 @@ function openSettings(){
     <div class="drawer-head"><h2>Settings</h2><button class="btn ghost" data-close type="button">Done</button></div>
     <div><div class="label" style="margin-bottom:8px">Departments</div>
     <p class="hint" style="margin-bottom:8px">${fileHasVendor?'Your inventory list names a distributor for each item. Use this only to fill gaps.':'Your inventory list has no distributor column, so pick who supplies each department. Items a different distributor carries can be changed one by one from the item panel.'} Untick departments that aren’t stock you reorder, like fees.</p>
-    <datalist id="deptVendList"></datalist>
     <div class="tablewrap"><table class="vend"><thead><tr><th>Department</th><th>Items</th><th>Distributor</th><th>Plan</th></tr></thead><tbody>
-    ${depts.map(([dn,n],i)=>{const c=deptOf(dn);return `<tr><td>${esc(dn)}</td><td class="mono">${int(n)}</td><td><input id="dv${i}" data-d="${i}" list="deptVendList" value="${esc(c.vendor)}" placeholder="${fileHasVendor?'from file':'Type a distributor'}" aria-label="Distributor for ${esc(dn)}" style="max-width:none"></td><td><input id="dk${i}" data-dk="${i}" type="checkbox"${c.skip?'':' checked'} aria-label="Include ${esc(dn)} in planning" style="width:16px;height:16px"></td></tr>`}).join('')}
+    ${depts.map(([dn,n],i)=>{const c=deptOf(dn);return `<tr><td>${esc(dn)}</td><td class="mono">${int(n)}</td><td><select id="dv${i}" data-d="${i}" aria-label="Distributor for ${esc(dn)}" style="max-width:none">${vendorOptions(c.vendor,fileHasVendor?'From the item list':'None')}</select></td><td><input id="dk${i}" data-dk="${i}" type="checkbox"${c.skip?'':' checked'} aria-label="Include ${esc(dn)} in planning" style="width:16px;height:16px"></td></tr>`}).join('')}
     </tbody></table></div></div>
     <div><div class="label" style="margin-bottom:8px">Distributors</div>
     <p class="hint" style="margin-bottom:8px">Lead time is days from placing an order to having it on the shelf. Order cycle is how often you order from them. Together they set how much stock each order has to cover.</p>
@@ -3347,7 +3358,6 @@ function openSettings(){
   $('#sTagForm',d).onsubmit=e=>{e.preventDefault();const t=ensureTag($('#sTagIn',d).value);if(!t)return;$('#sTagIn',d).value='';renderTagTable();renderFilters();toast(`Created tag “${t}”`)};
   const renderVend=()=>{
     const vs=S.res?[...new Set(S.res.results.map(x=>x.it.vendor))].sort():[];
-    $('#deptVendList').innerHTML=vs.filter(v=>v!==NO_DIST).map(v=>`<option value="${esc(v)}">`).join('');
     $('#vendTable').innerHTML=`<div class="tablewrap"><table class="vend"><thead><tr><th>Distributor</th><th>Lead time (days)</th><th>Order every (days)</th><th>Minimum $</th><th>Order by</th></tr></thead><tbody>
     ${vs.map((v,i)=>{const c=vendorOf(v);return `<tr><td>${esc(v)}</td><td><input id="vl${i}" data-v="${i}" data-f="lead" type="number" min="0" value="${c.lead}" aria-label="Lead time for ${esc(v)}"></td><td><input id="vc${i}" data-v="${i}" data-f="cycle" type="number" min="1" value="${c.cycle}" aria-label="Order cycle for ${esc(v)}"></td><td><input id="vm${i}" data-v="${i}" data-f="min" type="number" min="0" value="${c.min}" aria-label="Minimum order for ${esc(v)}"></td><td><select id="vb${i}" data-v="${i}" data-f="by" aria-label="Order unit for ${esc(v)}"><option value="case"${c.by==='case'?' selected':''}>Full cases</option><option value="unit"${c.by==='unit'?' selected':''}>Single units</option></select></td></tr>`}).join('')}
     </tbody></table></div>`;
@@ -3355,7 +3365,7 @@ function openSettings(){
   };
   renderVend();
   const setDept=(i,patch)=>{const dn=depts[i][0];deptCfg[dn]=Object.assign({},deptCfg[dn]||{},patch);store.set('depts',deptCfg);clearTimeout(tm);recompute();renderVend()};
-  $$('[data-d]',d).forEach(i=>i.onchange=()=>setDept(+i.dataset.d,{vendor:i.value.trim()}));
+  $$('[data-d]',d).forEach(i=>i.onchange=()=>setDept(+i.dataset.d,{vendor:i.value}));
   $$('[data-dk]',d).forEach(i=>i.onchange=()=>setDept(+i.dataset.dk,{skip:!i.checked}));
   let armed=false;
   if($('#sSignOut'))$('#sSignOut').onclick=signOut;
