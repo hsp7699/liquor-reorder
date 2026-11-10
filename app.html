@@ -403,6 +403,10 @@ tr.qd-head.rest:hover td{background:var(--sunk)}
 .mixpop-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;margin-bottom:2px}
 .mixpop .check{font-size:13px}
 .qf-add{padding:12px 14px 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px;max-width:520px}
+.qf-group{padding:12px 14px 0;display:flex;flex-wrap:wrap;gap:8px 10px;align-items:flex-end}
+.qf-group .field{flex:1 1 180px;max-width:260px}
+.qf-group select{min-height:36px;padding:7px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);width:100%}
+.qf-group .hint{flex-basis:100%;margin:0}
 .qf-add input{min-height:36px;padding:7px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);width:100%}
 .tiers{display:flex;flex-direction:column;gap:6px}
 .tier{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.3fr) auto;gap:8px;align-items:end}
@@ -2425,7 +2429,7 @@ const qtyTxt=(r,u)=>!u?'—':r.byCase?`${int(u/r.pack)} cs <span class="sub">(${
 // the sample store opens on a worked example; real data starts blank
 function resetQuick(){
   if(S.quick.busy)S.quick.busy.abort();
-  Object.assign(S.quick,{anchor:'',qty:'',days:'',countIn:'case',mixSizes:false,mixFlavors:false,sizeSel:null,flavSel:null,disc:'',extra:[],manual:{},review:{},why:{},note:'',busy:null});
+  Object.assign(S.quick,{anchor:'',qty:'',days:'',grpDept:'',grpVend:'',countIn:'case',mixSizes:false,mixFlavors:false,sizeSel:null,flavSel:null,disc:'',extra:[],manual:{},review:{},why:{},note:'',busy:null});
   if(S.sample&&SAMPLE_DEALS[0])Object.assign(S.quick,{anchor:SAMPLE_DEALS[0].anchor,qty:'10',mixSizes:true});
 }
 function quickLabel(r){return r?[r.it.name,r.it.size,r.it.pack].filter(Boolean).join(' '):''}
@@ -2479,7 +2483,7 @@ function bindQuick(){
 // start the quick check over: no item, quantity, added items, typed amounts or mix choices
 function clearQuick(){
   if(S.quick.busy)S.quick.busy.abort();
-  Object.assign(S.quick,{anchor:'',qty:'',days:'',mixSizes:false,mixFlavors:false,sizeSel:null,flavSel:null,disc:'',extra:[],manual:{},review:{},why:{},note:'',busy:null});
+  Object.assign(S.quick,{anchor:'',qty:'',days:'',grpDept:'',grpVend:'',mixSizes:false,mixFlavors:false,sizeSel:null,flavSel:null,disc:'',extra:[],manual:{},review:{},why:{},note:'',busy:null});
   closeMixPops();renderView();
   const i=$('#qqItem');if(i)i.focus();
 }
@@ -2603,7 +2607,7 @@ function renderQuickOut(){
   syncClear();
   syncMixCtl();
   const m=quickModel();
-  if(!m){el.innerHTML='<div class="empty">Search for the item the QD is on.</div>';return}
+  if(!m){el.innerHTML=`<div class="empty">Search for the item the QD is on, or add a whole department or distributor.</div>${groupHtml()}<div style="height:14px"></div>`;bindGroup(el);return}
   const anyManual=Object.keys(q.manual).length>0,onOrder=qdList().length;
   const body=m.rows.map((x,i)=>{
     const r=x.r,u=m.units[i],st=stepOf(r),added=q.extra.includes(r.key)&&!m.auto.includes(r.key),rv=q.review[r.key],why=q.why[r.key];
@@ -2612,7 +2616,7 @@ function renderQuickOut(){
       <td class="r c-days" data-qd="${esc(r.key)}">${daysTxt(x,u)}</td></tr>`;
   }).join('');
   el.innerHTML=`<div id="qqSum">${quickSummary(m)}</div><div id="qqNote">${suggestNote()}</div><div class="tablewrap" style="box-shadow:none;border-top:1px solid var(--line);border-radius:0"><table class="items plain list"><thead><tr><th>Item</th><th class="r">Sells / wk</th><th class="r">On hand</th><th class="r">Normal order</th><th class="r">Order</th><th class="r">Days of supply after</th></tr></thead><tbody>${body}</tbody></table></div>
-    <div class="qf-add"><div class="field"><label for="qqAdd">Add another item to this QD</label><input id="qqAdd" type="search" autocomplete="off" placeholder="e.g. Bacardi Gold 375"></div><div class="results" id="qqAddRes" hidden></div></div>
+    <div class="qf-add"><div class="field"><label for="qqAdd">Add another item to this QD</label><input id="qqAdd" type="search" autocomplete="off" placeholder="e.g. Bacardi Gold 375"></div><div class="results" id="qqAddRes" hidden></div></div>${groupHtml()}
     <div class="qq-bar"><div><b id="qqTot">${totalTxt(m)}</b><div class="hint">${m.days?'Change any quantity with − and +; the others keep their days of stock.':'Change any quantity with − and +; the others adjust to keep the QD total.'} <button class="btn ghost small" id="qqReset" type="button"${anyManual?'':' hidden'}>Reset to suggestion</button></div></div>
       <div class="row"><button class="btn small ghost" id="qqSave" type="button">Save as a deal…</button>${q.busy?'<button class="btn" id="qqStop" type="button">Stop</button>':''}<button class="btn" id="qqSuggest" type="button"${q.busy?' disabled':''}>${q.busy?'Suggesting…':'Suggest order'}</button><button class="btn primary" id="qqOrder" type="button">Add to order</button></div></div>
     ${onOrder?`<div class="qq-onorder">${onOrder} QD${onOrder===1?' is':'s are'} on your order. <button class="btn ghost small" id="qqGo" type="button">View on the Reorder list</button></div>`:''}`;
@@ -2635,6 +2639,7 @@ function renderQuickOut(){
   });
   $$('[data-qrm]',el).forEach(b=>b.onclick=()=>{const k=b.dataset.qrm;q.extra=q.extra.filter(x=>x!==k);delete q.manual[k];delete q.review[k];renderQuickOut()});
   bindItemSearch($('#qqAdd'),$('#qqAddRes'),k=>{q.extra.push(k);renderQuickOut();const i=$('#qqAdd');if(i)i.focus()},new Set(m.fam));
+  bindGroup(el);
   $('#qqReset').onclick=()=>{q.manual={};q.review={};q.why={};q.note='';renderQuickOut()};
   $('#qqSuggest').onclick=suggestOrder;
   if($('#qqStop'))$('#qqStop').onclick=()=>q.busy&&q.busy.abort();
@@ -2651,6 +2656,45 @@ function renderQuickOut(){
   $('#qqSave').onclick=()=>{const mm=quickModel();openDealEditor({preset:{anchor:q.anchor,mixSizes:q.mixSizes,mixFlavors:q.mixFlavors,keys:mm.rows.map(x=>x.r.key),countIn:q.countIn,tiers:[{min:mm.qty||'',amt:mm.disc||'',type:q.countIn==='case'?'case':'unit'}]}})};
   const go=$('#qqGo');if(go)go.onclick=()=>{goTab('reorder');$('#tabs').scrollIntoView({behavior:'smooth'})};
   refreshQuick(m);
+}
+// Add a whole department and/or distributor to the QD at once (for deals like "any 20 cases of RNDC tequila").
+// Items that never sold and have none on hand are left out; with no deal item yet, the best seller becomes it.
+function groupMatches(){
+  const q=S.quick;if(!q.grpDept&&!q.grpVend)return {add:[],dead:0};
+  const have=new Set([q.anchor,...q.extra].filter(Boolean));
+  const all=S.res.results.filter(r=>!r.child&&!r.held&&(!q.grpDept||r.it.category===q.grpDept)&&(!q.grpVend||r.it.vendor===q.grpVend)&&!have.has(r.key));
+  const add=all.filter(r=>r.base>0||r.onHand>0).sort((a,b)=>b.perWk-a.perWk);
+  return {add,dead:all.length-add.length};
+}
+function groupHtml(){
+  const q=S.quick,R=S.res.results.filter(r=>!r.child);
+  const depts=[...new Set(R.map(r=>r.it.category))].sort((a,b)=>a.localeCompare(b));
+  const vends=[...new Set(R.map(r=>r.it.vendor))].sort((a,b)=>(a===NO_DIST)-(b===NO_DIST)||a.localeCompare(b));
+  const opt=(v,cur)=>`<option value="${esc(v)}"${v===cur?' selected':''}>${esc(v)}</option>`;
+  const added=q.extra.length;
+  return `<div class="qf-group"><div class="field"><label for="qqGDept">Add a whole department</label><select id="qqGDept"><option value="">Any department</option>${depts.map(d=>opt(d,q.grpDept)).join('')}</select></div>
+    <div class="field"><label for="qqGVend">and/or distributor</label><select id="qqGVend"><option value="">Any distributor</option>${vends.map(v=>opt(v,q.grpVend)).join('')}</select></div>
+    <button class="btn small" id="qqGAdd" type="button" disabled>Add items</button>${added>1?`<button class="btn small ghost" id="qqGClear" type="button">Remove ${added} added items</button>`:''}
+    <p class="hint" id="qqGHint"></p></div>`;
+}
+function bindGroup(el){
+  const q=S.quick,btn=$('#qqGAdd',el);if(!btn)return;
+  const sync=()=>{
+    const {add,dead}=groupMatches(),h=$('#qqGHint',el);
+    btn.disabled=!add.length;btn.textContent=add.length?`Add ${int(add.length)} item${add.length===1?'':'s'}`:'Add items';
+    h.textContent=!q.grpDept&&!q.grpVend?'Pick a department, a distributor or both to add every item in it.':add.length?`${int(add.length)} item${add.length===1?'':'s'} not in this QD yet${dead?`; ${int(dead)} that never sold and have none on hand are left out`:''}.${add.length>60?' That’s a lot of lines; narrow it with both lists if you can.':''}`:dead?`Only items that never sold and have none on hand match, so nothing to add.`:'Everything that matches is already in this QD.';
+  };
+  $('#qqGDept',el).onchange=e=>{q.grpDept=e.target.value;sync()};
+  $('#qqGVend',el).onchange=e=>{q.grpVend=e.target.value;sync()};
+  btn.onclick=()=>{
+    const {add}=groupMatches();if(!add.length)return;
+    const keys=add.map(r=>r.key);
+    if(!q.anchor){q.anchor=keys.shift();q.manual={};q.review={};q.why={};q.note='';const i=$('#qqItem');if(i)i.value=quickLabel(S.res.byKey.get(q.anchor))}
+    q.extra.push(...keys);
+    toast(`Added ${int(add.length)} item${add.length===1?'':'s'} to the QD`);renderQuickOut();
+  };
+  const c=$('#qqGClear',el);if(c)c.onclick=()=>{const was=q.extra.slice();q.extra=[];for(const k of was){delete q.manual[k];delete q.review[k]}renderQuickOut();toast(`Removed ${was.length} added items`,{label:'Undo',fn:()=>{q.extra=was;renderQuickOut()}})};
+  sync();
 }
 const pendingReview=m=>m.rows.filter(x=>S.quick.review[x.r.key]).map(x=>x.r.key);
 function clearReview(k){
