@@ -33,7 +33,7 @@ Built. When you change an item's distributor in its details, a box appears below
 - **Not built yet:** a bulk "set distributor" action. If it's added, it should use the same offer.
 - **Open question:** should a new size that shows up later automatically use the family's distributor?
 
-## 4. Suppress button on the Quantity deals page
+## 4. Suppress button on the Quantity deals page (done)
 
 Each item line in the Quick QD check gets a **Suppress** button, the same as on the Reorder list.
 

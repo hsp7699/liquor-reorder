@@ -403,6 +403,8 @@ tr.qd-head.rest:hover td{background:var(--sunk)}
 .mixpop-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;margin-bottom:2px}
 .mixpop .check{font-size:13px}
 .qf-add{padding:12px 14px 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px;max-width:520px}
+.qq-sup{margin:10px 14px 0}.qq-supi{display:inline-flex;align-items:center;gap:2px;margin-left:8px;white-space:nowrap}
+#qqOut td.key .sup{margin-top:2px}
 .qf-group{padding:12px 14px 0;display:flex;flex-wrap:wrap;gap:8px 10px;align-items:flex-end}
 .qf-group .field{flex:1 1 180px;max-width:260px}
 .qf-group select{min-height:36px;padding:7px 10px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);width:100%}
@@ -2612,10 +2614,11 @@ function renderQuickOut(){
   const body=m.rows.map((x,i)=>{
     const r=x.r,u=m.units[i],st=stepOf(r),added=q.extra.includes(r.key)&&!m.auto.includes(r.key),rv=q.review[r.key],why=q.why[r.key];
     return `<tr data-qk="${esc(r.key)}" title="Click for details"${rv?' class="needs-review"':''}><td><div class="nm">${esc(r.it.name)}${added?` <span class="chip acc">added</span> <button class="x" type="button" data-qrm="${esc(r.key)}" aria-label="Remove ${esc(r.it.name)}">${ic('x')}</button>`:''}</div><div class="sub">${esc([r.it.size,r.it.pack,r.it.sku?'#'+r.it.sku:'',r.it.category].filter(Boolean).join(' · '))}</div><div class="m-meta">${mMeta(`${dec1(r.perWk)}/wk`,`${int(r.onHand)} on hand`,x.normal?`normally ${qtyShort(r,x.normal)}`:'')}</div>${rv?`<div class="why" data-why="${esc(r.key)}"><span>${esc(rv)}</span> <button class="btn small" type="button" data-ok="${esc(r.key)}">Looks right</button></div>`:why?`<div class="why ok">${esc(why)}</div>`:''}</td><td class="r" title="${esc(rateBasis(r))}">${dec1(r.perWk)}${r.oosWk.length?`<div class="sub">${r.oosWk.length} out-of-stock wk${r.oosWk.length===1?'':'s'} skipped</div>`:''}</td><td class="r">${int(r.onHand)}</td><td class="r">${qtyTxt(r,x.normal)}</td>
-      <td class="r key"><div class="stepper${x.locked?' set':''}"><button type="button" data-step="-1" data-k="${esc(r.key)}" aria-label="One less ${r.byCase?'case':'unit'} of ${esc(r.it.name)}">${ic('minus')}</button><input type="number" min="0" step="1" inputmode="numeric" data-qv="${esc(r.key)}" value="${u/st}" aria-label="${r.byCase?'Cases':'Units'} of ${esc(quickLabel(r))}"><button type="button" data-step="1" data-k="${esc(r.key)}" aria-label="One more ${r.byCase?'case':'unit'} of ${esc(r.it.name)}">${ic('plus')}</button></div><div class="sub" data-qu="${esc(r.key)}">${r.byCase?`cs of ${r.pack} = ${int(u)}`:'units'}</div></td>
+      <td class="r key"><div class="stepper${x.locked?' set':''}"><button type="button" data-step="-1" data-k="${esc(r.key)}" aria-label="One less ${r.byCase?'case':'unit'} of ${esc(r.it.name)}">${ic('minus')}</button><input type="number" min="0" step="1" inputmode="numeric" data-qv="${esc(r.key)}" value="${u/st}" aria-label="${r.byCase?'Cases':'Units'} of ${esc(quickLabel(r))}"><button type="button" data-step="1" data-k="${esc(r.key)}" aria-label="One more ${r.byCase?'case':'unit'} of ${esc(r.it.name)}">${ic('plus')}</button></div><div class="sub" data-qu="${esc(r.key)}">${r.byCase?`cs of ${r.pack} = ${int(u)}`:'units'}</div><button class="btn ghost small sup" type="button" data-qsup="${esc(r.key)}" title="Leave this item out of this QD and stop suggesting it in future orders">Suppress</button></td>
       <td class="r c-days" data-qd="${esc(r.key)}">${daysTxt(x,u)}</td></tr>`;
   }).join('');
   el.innerHTML=`<div id="qqSum">${quickSummary(m)}</div><div id="qqNote">${suggestNote()}</div><div class="tablewrap" style="box-shadow:none;border-top:1px solid var(--line);border-radius:0"><table class="items plain list"><thead><tr><th>Item</th><th class="r">Sells / wk</th><th class="r">On hand</th><th class="r">Normal order</th><th class="r">Order</th><th class="r">Days of supply after</th></tr></thead><tbody>${body}</tbody></table></div>
+    ${(()=>{const sup=m.fam.map(k=>S.res.byKey.get(k)).filter(r=>r&&r.held);return sup.length?`<div class="supp-note qq-sup">${int(sup.length)} suppressed item${sup.length===1?' is':'s are'} left out of this QD: ${sup.map(r=>`<span class="qq-supi">${esc(quickLabel(r))} <button class="btn ghost small" type="button" data-qunsup="${esc(r.key)}">Unsuppress</button></span>`).join('')}</div>`:''})()}
     <div class="qf-add"><div class="field"><label for="qqAdd">Add another item to this QD</label><input id="qqAdd" type="search" autocomplete="off" placeholder="e.g. Bacardi Gold 375"></div><div class="results" id="qqAddRes" hidden></div></div>${groupHtml()}
     <div class="qq-bar"><div><b id="qqTot">${totalTxt(m)}</b><div class="hint">${m.days?'Change any quantity with − and +; the others keep their days of stock.':'Change any quantity with − and +; the others adjust to keep the QD total.'} <button class="btn ghost small" id="qqReset" type="button"${anyManual?'':' hidden'}>Reset to suggestion</button></div></div>
       <div class="row"><button class="btn small ghost" id="qqSave" type="button">Save as a deal…</button>${q.busy?'<button class="btn" id="qqStop" type="button">Stop</button>':''}<button class="btn" id="qqSuggest" type="button"${q.busy?' disabled':''}>${q.busy?'Suggesting…':'Suggest order'}</button><button class="btn primary" id="qqOrder" type="button">Add to order</button></div></div>
@@ -2623,6 +2626,15 @@ function renderQuickOut(){
   // −/+ and typed quantities only refresh the numbers, so focus and clicks are never lost
   el.onclick=e=>{
     const ok=e.target.closest('[data-ok]');if(ok){clearReview(ok.dataset.ok);refreshQuick();return}
+    // Suppress works as on the Reorder list: the item leaves this QD and isn't suggested again until unsuppressed
+    const sp=e.target.closest('[data-qsup],[data-qunsup]');
+    if(sp){
+      const on=!!sp.dataset.qsup,k=sp.dataset.qsup||sp.dataset.qunsup,name=S.res.byKey.get(k).it.name;
+      if(on){delete q.manual[k];delete q.review[k];delete q.why[k]}
+      setSuppressed(k,on);
+      toast(on?`Suppressed ${name}. It’s out of this QD and won’t be suggested again.`:`${name} is back in this QD`,{label:'Undo',fn:()=>setSuppressed(k,!on)});
+      return;
+    }
     const b=e.target.closest('[data-step]');
     if(!b){
       // anywhere else on a row opens the item's details, same as the Reorder list
